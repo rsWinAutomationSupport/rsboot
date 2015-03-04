@@ -5,20 +5,20 @@
 )
 $VerbosePreference = 'Continue'
 function Create-Secrets {
-  if(Test-path (Join-Path $defaultPath secrets.ps1) ) {
-    $d = Get-Content $(Join-Path $defaultPath secrets.ps1) | ConvertFrom-Json
-  }
-  else {
-    $keys = @('branch_rsConfigs','mR','git_username','provBr','gitBr','git_oAuthtoken')
-    foreach($key in $keys){
-      if($secrets.keys -notcontains $key){ 
-        Write-Verbose "$key key is missing from secrets parameter"
-        exit
-      }
-    if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
-    Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
+    if(Test-path (Join-Path $defaultPath secrets.ps1) ) {
+        $d = Get-Content $(Join-Path $defaultPath secrets.ps1) | ConvertFrom-Json
     }
-  }
+    else {
+        $keys = @('branch_rsConfigs','mR','git_username','provBr','gitBr','git_oAuthtoken')
+        foreach($key in $keys){
+            if($secrets.keys -notcontains $key){ 
+                Write-Verbose "$key key is missing from secrets parameter"
+                exit
+            }
+            if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
+            Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
+        }
+    }
 }
 
 
@@ -69,7 +69,9 @@ function Set-PullLCM {
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 '@ | Invoke-Expression -Verbose
 }
-
+function Set-Pull {
+     Invoke-Expression 'C:\DevOps\rsConfigs\rsPullServer.ps1' -Verbose
+}
 Configuration Boot0 {
   node $env:COMPUTERNAME {
     script DevOpsDir {
@@ -279,3 +281,4 @@ Boot0 -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-PullLCM
 Set-rsPlatform
+Set-Pull
