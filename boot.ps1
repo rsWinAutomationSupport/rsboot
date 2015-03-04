@@ -270,6 +270,7 @@ if( ! (Test-path (Join-Path $defaultPath secrets.ps1)) ){
     }
     Create-Secrets
 }
+Create-BootTask
 Boot0 -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-PullLCM
