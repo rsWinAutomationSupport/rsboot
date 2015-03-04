@@ -16,16 +16,16 @@ function Create-Secrets {
 }
 
 function Set-rsPlatform {
-  @'
+@'
     Configuration initDSC {
-    Import-DscResource -ModuleName rsPlatform
-    Node $env:COMPUTERNAME
-    {
-    rsPlatform Modules
-    {
-    Ensure = "Present"
-    }
-    }
+        Import-DscResource -ModuleName rsPlatform
+        Node $env:COMPUTERNAME
+        {
+            rsPlatform Modules
+            {
+                Ensure = "Present"
+            }
+        }
     }
     initDSC -OutputPath 'C:\Windows\Temp'
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
