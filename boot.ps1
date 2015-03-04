@@ -16,7 +16,7 @@ function Create-Secrets {
                 exit
             }
             if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
-            Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
+            Set-Content -Path 'C:\DevOps\secrets.json' -Value $($secrets | ConvertTo-Json -Depth 2)
         }
     }
 }
@@ -43,8 +43,6 @@ function Set-rsPlatform {
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
-
-
 
 function Set-PullLCM {
   @'
