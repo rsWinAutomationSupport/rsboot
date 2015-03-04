@@ -4,11 +4,6 @@
     [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue'
-
-$keys = @('branch_rsConfigs','mR','git_username','provBr','gitBr','git_oAuthtoken')
-foreach($key in $keys){
-    if($secrets.keys -notcontains $key){ Write-Verbose "$key key is missing from secrets parameter";exit}
-}
 function Create-Secrets {
     if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
     Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
@@ -283,9 +278,17 @@ Configuration Boot0 {
     }
     
    
-
-        Create-Secrets
-        Boot0 -OutputPath 'C:\Windows\Temp' -Verbose
-        Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-        Set-PullLCM
-        Set-rsPlatform 
+if( ! (Test-path (Join-Path $defaultPath secrets.ps1)) ){
+    $keys = @('branch_rsConfigs','mR','git_username','provBr','gitBr','git_oAuthtoken')
+    foreach($key in $keys){
+        if($secrets.keys -notcontains $key){ 
+            Write-Verbose "$key key is missing from secrets parameter"
+            exit
+        }
+    }
+    Create-Secrets
+}
+Boot0 -OutputPath 'C:\Windows\Temp' -Verbose
+Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+Set-PullLCM
+Set-rsPlatform
