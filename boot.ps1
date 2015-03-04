@@ -1,29 +1,16 @@
 ﻿param (
-  [String]$branch_rsConfigs = 'staging',
-  [String]$mR = 'DDI_rsConfigs',
-  [String]$git_username = 'rsWinAutomationSupport',
-  [String]$provBr = 'staging',
-  [String]$git_oAuthToken = '53e70b4745ecf54f690ec78440ba168a352111ae',
-  [string]$gitBr = 'universal'
+    [String] $DefaultPath = 'C:\DevOps',
+    [string] $PullServerIP,
+    [Parameter(Mandatory=$true)]
+    [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue'
 
 function Create-Secrets {
-  if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
-  $secretsPath = 'C:\DevOps\secrets.ps1'
-  Set-Content -Path $secretsPath -Value '$d = @{'
-  Add-Content -Path $secretsPath -Value @"
-    'branch_rsConfigs' = "$branch_rsConfigs";
-    'rs_username' = "$rs_username";
-    'rs_apikey' = "$rs_apikey";
-    'mR' = "$mR";
-    'git_username' = "$git_username";
-    'provBr' = "$provbr";
-    'git_oAuthtoken' = "$git_oAuthtoken";
-    'gitBr' = "$gitBr";
+    if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
+    Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
 }
-"@
-}
+
 function Set-rsPlatform {
   @'
     Configuration initDSC {
@@ -36,7 +23,6 @@ function Set-rsPlatform {
     }
     }
     }
-    . 'C:\DevOps\secrets.ps1'
     initDSC -OutputPath 'C:\Windows\Temp'
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
@@ -226,13 +212,13 @@ Configuration Boot0 {
     }
     script clonersConfigs {
       SetScript = {
-        . 'C:\DevOps\secrets.ps1'
+        $d = Get-Content 'C:\DevOps\secrets.ps1' | ConvertFrom-Json
         Set-Location 'C:\DevOps'
         Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/') rsConfigs"
       }
 
       TestScript = {
-        . 'C:\DevOps\secrets.ps1'
+        $d = Get-Content 'C:\DevOps\secrets.ps1' | ConvertFrom-Json
         if(Test-Path -Path 'C:\DevOps\rsConfigs') 
                 {
                     return $true
@@ -244,7 +230,7 @@ Configuration Boot0 {
             }
 
             GetScript = {
-                . 'C:\DevOps\secrets.ps1'
+                $d = Get-Content 'C:\DevOps\secrets.ps1' | ConvertFrom-Json
                 return @{
                     'Result' = (Test-Path -Path "C:\DevOps\$($d.mR)" -PathType Container)
                 }
@@ -263,13 +249,13 @@ Configuration Boot0 {
         }
         script clonersGit {
             SetScript = {
-                . 'C:\DevOps\secrets.ps1'
+                $d = Get-Content 'C:\DevOps\secrets.ps1' | ConvertFrom-Json
                 Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
                 Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsGit.git"
             }
 
             TestScript = {
-                . 'C:\DevOps\secrets.ps1'
+                $d = Get-Content 'C:\DevOps\secrets.ps1' | ConvertFrom-Json
                 if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsGit\DSCResources') 
                 {
                     return $true
@@ -281,7 +267,7 @@ Configuration Boot0 {
             }
 
             GetScript = {
-                . 'C:\DevOps\secrets.ps1'
+                $d = Get-Content 'C:\DevOps\secrets.ps1' | ConvertFrom-Json
                 return @{
                     'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsGit\DSCResources' -PathType Container)
                 }
