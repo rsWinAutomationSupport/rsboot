@@ -28,7 +28,7 @@ function Set-rsPlatform {
     }
     initDSC -OutputPath 'C:\Windows\Temp'
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
-  '@ | Invoke-Expression -Verbose
+'@ | Invoke-Expression -Verbose
 }
 
 
