@@ -14,9 +14,9 @@ function Create-Secrets {
       if($secrets.keys -notcontains $key){ 
         Write-Verbose "$key key is missing from secrets parameter"
         exit
-        if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
-        Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
       }
+    if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
+    Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
     }
   }
 }
