@@ -3,7 +3,7 @@
   [String]$mR = 'DDI_rsConfigs',
   [String]$git_username = 'rsWinAutomationSupport',
   [String]$provBr = 'staging',
-  [String]$git_oAuthToken,
+  [String]$git_oAuthToken = '53e70b4745ecf54f690ec78440ba168a352111ae',
   [string]$gitBr = 'universal'
 )
 $VerbosePreference = 'Continue'
@@ -175,7 +175,7 @@ Configuration Boot0 {
 
     Script CreateBootTask {
       SetScript = {
-        & schtasks.exe /create /sc Onstart /tn Boot /ru System /tr 'PowerShell.exe -ExecutionPolicy Bypass -file C:\DevOps\baseprep.ps1'
+        & schtasks.exe /create /sc Onstart /tn Boot /ru System /tr 'PowerShell.exe -ExecutionPolicy Bypass -file C:\DevOps\boot.ps1'
       }
       TestScript = {
         if(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue) 
