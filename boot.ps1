@@ -161,7 +161,7 @@ Configuration Boot0 {
 
     Script CreateBootTask {
       SetScript = {
-        & schtasks.exe /create /sc Onstart /tn Boot /ru System /tr 'PowerShell.exe -ExecutionPolicy Bypass -file C:\DevOps\boot.ps1'
+        & schtasks.exe /create /sc Onstart /tn Boot /ru System /tr "PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath"
       }
       TestScript = {
         if(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue) 
