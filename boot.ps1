@@ -1,7 +1,6 @@
 ﻿param (
     [String] $DefaultPath = 'C:\DevOps',
     [string] $PullServerIP,
-    [Parameter(Mandatory=$true)]
     [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue'
