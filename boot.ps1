@@ -6,6 +6,10 @@
 )
 $VerbosePreference = 'Continue'
 
+$keys = @('branch_rsConfigs','mR','git_username','provBr','gitBr','git_oAuthtoken')
+foreach($key in $keys){
+    if($secrets.keys -notcontains $key){ Write-Verbose "$key key is missing from secrets parameter";exit}
+}
 function Create-Secrets {
     if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
     Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
