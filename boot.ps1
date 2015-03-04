@@ -9,8 +9,13 @@ function Create-Secrets {
     Set-Content -Path 'C:\DevOps\secrets.ps1' -Value $($secrets | ConvertTo-Json -Depth 2)
 }
 
+function Create-BootTask {
+  if(!(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue)) {
+    Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath"""
+  }
+}
 function Set-rsPlatform {
-@'
+  @'
     Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
@@ -23,7 +28,7 @@ function Set-rsPlatform {
     }
     initDSC -OutputPath 'C:\Windows\Temp'
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
-'@ | Invoke-Expression -Verbose
+  '@ | Invoke-Expression -Verbose
 }
 
 
@@ -155,29 +160,6 @@ Configuration Boot0 {
         }
       }
       DependsOn = '[Script]GetGit'
-    }
-
-    Script CreateBootTask {
-      SetScript = {
-      $execPath = $PSCommandPath
-        & schtasks.exe /create /sc Onstart /tn Boot /ru System /tr "PowerShell.exe -ExecutionPolicy Bypass -file $execPath"
-      }
-      TestScript = {
-        if(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue) 
-        {
-          return $true 
-        }
-        else 
-        {
-          return $false 
-        }
-      }
-      GetScript = {
-        return @{
-          'Result' = $((Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue).State)
-        }
-      }
-      DependsOn = '[Script]DevOpsDir'
     }
     Registry SetGitPath
     {       
