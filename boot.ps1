@@ -119,7 +119,7 @@ Configuration Boot0 {
           'Result' = $PSVersionTable.PSVersion.Major
         }
       }
-      DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir', '[Script]CreateBootTask')
+      DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
     }
     Script GetGit {
       SetScript = {
