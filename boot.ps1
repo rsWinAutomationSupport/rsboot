@@ -1,9 +1,14 @@
 ﻿param (
-    [String] $DefaultPath = 'C:\DevOps',
+    [String] $defaultPath  = 'C:\DevOps',
     [string] $PullServerIP,
     [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue'
+[Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
+foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){
+    $arguments += "-$key "
+    $arguments += "$($PSBoundParameters[$key]) "
+}
 function Create-Secrets {
     if(Test-path (Join-Path $defaultPath 'secrets.json') ) {
         $d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json
@@ -15,16 +20,14 @@ function Create-Secrets {
                 Write-Verbose "$key key is missing from secrets parameter"
                 exit
             }
-            if((Test-Path -Path 'C:\DevOps') -eq $false) {New-Item -Path 'C:\DevOps' -ItemType Directory -Force}
-            Set-Content -Path 'C:\DevOps\secrets.json' -Value $($secrets | ConvertTo-Json -Depth 2)
+            if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
+            Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
         }
     }
 }
-
-
 function Create-BootTask {
     if(!(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue)) {
-        Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath"""
+        Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""
     }
 }
 function Set-rsPlatform {
@@ -43,7 +46,6 @@ function Set-rsPlatform {
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
-
 function Set-PullLCM {
     @'
     [DSCLocalConfigurationManager()]
@@ -68,17 +70,17 @@ function Set-PullLCM {
 '@ | Invoke-Expression -Verbose
 }
 function Set-Pull {
-    Invoke-Expression 'C:\DevOps\rsConfigs\rsPullServer.ps1' -Verbose
+    Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose
 }
 Configuration Boot0 {
     node $env:COMPUTERNAME {
         script DevOpsDir {
             SetScript = {
-                New-Item -Path 'C:\DevOps' -ItemType Directory
+                New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory
             }
 
             TestScript = {
-                if(Test-Path -Path 'C:\DevOps') 
+                if(Test-Path -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')))
                 {
                     return $true
                 }
@@ -90,29 +92,29 @@ Configuration Boot0 {
 
             GetScript = {
                 return @{
-                    'Result' = (Test-Path -Path 'C:\DevOps' -PathType Container)
+                    'Result' = (Test-Path -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -PathType Container)
                 }
             }
         }
         Script GetWMF5 {
             SetScript = {
-                (New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', 'C:\DevOps\WindowsBlue-KB3037315-x64.msu')
+                (New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'WindowsBlue-KB3037315-x64.msu'))
             }
 
             TestScript = {
-                Test-Path -Path 'C:\DevOps\WindowsBlue-KB3037315-x64.msu'
+                Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
             }
 
             GetScript = {
                 return @{
-                    'Result' = $(Test-Path  -Path 'C:\DevOps\WindowsBlue-KB3037315-x64.msu')
+                    'Result' = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
                 }
             }
             DependsOn = '[Script]DevOpsDir'
         }
         Script InstallWmf5 {
             SetScript = {
-                Start-Process -Wait -FilePath 'C:\DevOps\WindowsBlue-KB3037315-x64.msu' -ArgumentList '/quiet'
+                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu') -ArgumentList '/quiet'
                 $global:DSCMachineStatus = 1 
             }
             TestScript = {
@@ -134,16 +136,16 @@ Configuration Boot0 {
         }
         Script GetGit {
             SetScript = {
-                (New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe','C:\DevOps\Git-Windows-Latest.exe')
+                (New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )
             }
 
             TestScript = {
-                Test-Path -Path 'C:\DevOps\Git-Windows-Latest.exe' 
+                Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe') 
             }
 
             GetScript = {
                 return @{
-                    'Result' = $(Test-Path  -Path 'C:\DevOps\Git-Windows-Latest.exe')
+                    'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe'))
                 }
             }
             DependsOn = '[Script]Installwmf5'
@@ -151,7 +153,7 @@ Configuration Boot0 {
 
         Script InstallGit {
             SetScript = {
-                Start-Process -Wait -FilePath 'C:\DevOps\Git-Windows-Latest.exe' -ArgumentList '/verysilent'
+                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe') -ArgumentList '/verysilent'
             }
 
             TestScript = {
@@ -203,14 +205,14 @@ Configuration Boot0 {
         }
         script clonersConfigs {
             SetScript = {
-                $d = Get-Content 'C:\DevOps\secrets.json' | ConvertFrom-Json
-                Set-Location 'C:\DevOps'
+                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 
                 Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/') rsConfigs"
             }
 
             TestScript = {
-                $d = Get-Content 'C:\DevOps\secrets.json' | ConvertFrom-Json
-                if(Test-Path -Path 'C:\DevOps\rsConfigs') 
+                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs')) 
                 {
                     return $true
                 }
@@ -221,16 +223,16 @@ Configuration Boot0 {
             }
 
             GetScript = {
-                $d = Get-Content 'C:\DevOps\secrets.json' | ConvertFrom-Json
+                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 return @{
-                    'Result' = (Test-Path -Path "C:\DevOps\$($d.mR)" -PathType Container)
+                    'Result' = (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR)) -PathType Container)
                 }
             }
             DependsOn = '[Script]UpdateGitConfig'
         }
         File rsPlatformDir
         {
-            SourcePath = 'C:\DevOps\rsConfigs\rsPlatform'
+            SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPlatform'
             DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
             Type = 'Directory'
             Recurse = $true
@@ -240,13 +242,13 @@ Configuration Boot0 {
         }
         script clonersGit {
             SetScript = {
-                $d = Get-Content 'C:\DevOps\secrets.json' | ConvertFrom-Json
+                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
                 Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsGit.git"
             }
 
             TestScript = {
-                $d = Get-Content 'C:\DevOps\secrets.json' | ConvertFrom-Json
+                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsGit\DSCResources') 
                 {
                     return $true
@@ -258,7 +260,7 @@ Configuration Boot0 {
             }
 
             GetScript = {
-                $d = Get-Content 'C:\DevOps\secrets.json' | ConvertFrom-Json
+                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 return @{
                     'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsGit\DSCResources' -PathType Container)
                 }
@@ -267,16 +269,16 @@ Configuration Boot0 {
         }
         Script GetMakeCert {
             SetScript = {
-                (New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\DevOps\makecert.exe')
+                (New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'makecert.exe'))
             }
 
             TestScript = {
-                Test-Path -Path 'C:\DevOps\makecert.exe' 
+                Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') 
             }
 
             GetScript = {
                 return @{
-                    'Result' = $(Test-Path  -Path 'C:\DevOps\makecert.exe')
+                    'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe'))
                 }
             }
             DependsOn = '[Script]clonersGit'
@@ -284,7 +286,7 @@ Configuration Boot0 {
 
         Script InstallMakeCert {
             SetScript = {
-                Copy-Item -Path 'C:\DevOps\makecert.exe' -Destination 'C:\Windows\System32' -Force
+                Copy-Item -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') -Destination 'C:\Windows\System32' -Force
             }
 
             TestScript = {
@@ -307,13 +309,13 @@ Configuration Boot0 {
                     $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
                 } |
                 Remove-Item
-                & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my 'C:\DevOps\PullServer.crt', -sr localmachine, -len 2048
+                & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
             }
 
             TestScript = {
                 if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {
                             $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                }) -and (Test-Path -Path 'C:\DevOps\PullServer.crt')) 
+                }) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
                 {
                     return $true 
                 }
@@ -341,7 +343,7 @@ Configuration Boot0 {
                     $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
                 } |
                 Remove-Item
-                & certutil.exe -addstore -f Root 'C:\DevOps\PullServer.crt'
+                & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
             }
 
             TestScript = {
@@ -371,7 +373,7 @@ Configuration Boot0 {
         }
         File PublicPullServerCert {
             Ensure = 'Present'
-            SourcePath = 'C:\DevOps\PullServer.crt'
+            SourcePath = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
             DestinationPath = 'C:\inetpub\wwwroot'
             MatchSource = $true
             Type = 'File'
