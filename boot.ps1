@@ -14,7 +14,7 @@ function Create-Secrets {
         $d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json
     }
     else {
-        $keys = @('branch_rsConfigs','mR','git_username','provBr','gitBr','git_oAuthtoken')
+        $keys = @('branch_rsConfigs','mR','git_username','gitBr','git_oAuthtoken')
         foreach($key in $keys){
             if($secrets.keys -notcontains $key){ 
                 Write-Verbose "$key key is missing from secrets parameter"
