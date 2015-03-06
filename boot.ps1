@@ -1,7 +1,7 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
     [string] $PullServerIP,
-    [Hashtable] $secrets,
+    [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue' 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
