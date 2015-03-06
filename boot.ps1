@@ -2,9 +2,8 @@
     [String] $defaultPath  = 'C:\DevOps',
     [string] $PullServerIP,
     [Hashtable] $secrets,
-    [Switch] $Verbose
 )
-if($verbose) { $VerbosePreference = 'Continue' }
+$VerbosePreference = 'Continue' 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
