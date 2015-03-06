@@ -1,93 +1,79 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
     [string] $PullServerIP,
-    [Hashtable] $secrets
+    [Hashtable] $secrets,
+    [Switch] $Verbose
 )
-$VerbosePreference = 'Continue'
+if($verbose) { $VerbosePreference = 'Continue' }
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
-foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){
-    $arguments += "-$key "
-    $arguments += "$($PSBoundParameters[$key]) "
-}
+foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
-    if(Test-path (Join-Path $defaultPath 'secrets.json') ) {
-        $d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json
-    }
+    if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
     else {
-        $keys = @('branch_rsConfigs','mR','git_username','gitBr','git_oAuthtoken')
+        $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
         foreach($key in $keys){
             if($secrets.keys -notcontains $key){ 
                 Write-Verbose "$key key is missing from secrets parameter"
                 exit
             }
             if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
-            Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
+            Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2) -Verbose
         }
     }
 }
 function Create-BootTask {
-    if(!(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue)) {
-        Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""
-    }
+    if(!(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue)) {Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""}
 }
 function Set-rsPlatform {
 @'
-    Configuration initDSC {
+        Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
         {
-            rsPlatform Modules
-            {
-                Ensure = "Present"
-            }
+        rsPlatform Modules
+        {
+        Ensure = "Present"
         }
-    }
-    initDSC -OutputPath 'C:\Windows\Temp'
-    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+        }
+        }
+        initDSC -OutputPath 'C:\Windows\Temp' -Verbose
+        Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
 function Set-PullLCM {
-    @'
-    [DSCLocalConfigurationManager()]
-    Configuration PullServerLCM
-    {
+@'
+        [DSCLocalConfigurationManager()]
+        Configuration PullServerLCM
+        {
    
-       Node $env:COMPUTERNAME
-       {
-          Settings
-          {
-             ActionAfterReboot = 'ContinueConfiguration'
-             RebootNodeIfNeeded = $true
-             ConfigurationMode = 'ApplyAndAutoCorrect'
-             RefreshMode = 'Push'
-             ConfigurationModeFrequencyMins = 30
-             AllowModuleOverwrite = $true
-          }
-       }
-    }
-    PullServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
-    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+        Node $env:COMPUTERNAME
+        {
+        Settings
+        {
+        ActionAfterReboot = 'ContinueConfiguration'
+        RebootNodeIfNeeded = $true
+        ConfigurationMode = 'ApplyAndAutoCorrect'
+        RefreshMode = 'Push'
+        ConfigurationModeFrequencyMins = 30
+        AllowModuleOverwrite = $true
+        }
+        }
+        }
+        PullServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
+        Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 '@ | Invoke-Expression -Verbose
 }
-function Set-Pull {
-    Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose
-}
+function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
 Configuration Boot0 {
     node $env:COMPUTERNAME {
         script DevOpsDir {
-            SetScript = {
-                New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory
-            }
+            SetScript = {New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory -Verbose}
 
             TestScript = {
                 if(Test-Path -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')))
-                {
-                    return $true
-                }
+                {return $true}
                 else 
-                {
-                    return $false
-                }
+                {return $false}
             }
 
             GetScript = {
@@ -97,13 +83,9 @@ Configuration Boot0 {
             }
         }
         Script GetWMF5 {
-            SetScript = {
-                (New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'WindowsBlue-KB3037315-x64.msu'))
-            }
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'WindowsBlue-KB3037315-x64.msu'))}
 
-            TestScript = {
-                Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
-            }
+            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')}
 
             GetScript = {
                 return @{
@@ -114,18 +96,14 @@ Configuration Boot0 {
         }
         Script InstallWmf5 {
             SetScript = {
-                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu') -ArgumentList '/quiet'
+                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu') -ArgumentList '/quiet' -Verbose
                 $global:DSCMachineStatus = 1 
             }
             TestScript = {
                 if($PSVersionTable.PSVersion.Major -ge 5) 
-                {
-                    return $true
-                }
+                {return $true}
                 else 
-                {
-                    return $false
-                }
+                {return $false}
             }
             GetScript = {
                 return @{
@@ -135,13 +113,9 @@ Configuration Boot0 {
             DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
         }
         Script GetGit {
-            SetScript = {
-                (New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )
-            }
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
-            TestScript = {
-                Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe') 
-            }
+            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')}
 
             GetScript = {
                 return @{
@@ -152,19 +126,13 @@ Configuration Boot0 {
         }
 
         Script InstallGit {
-            SetScript = {
-                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe') -ArgumentList '/verysilent'
-            }
+            SetScript = {Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe') -ArgumentList '/verysilent'}
 
             TestScript = {
                 if(Test-Path -Path 'C:\Program Files (x86)\Git\bin\git.exe') 
-                {
-                    return $true 
-                }
+                {return $true}
                 else 
-                {
-                    return $false 
-                }
+                {return $false}
             }
 
             GetScript = {
@@ -179,7 +147,7 @@ Configuration Boot0 {
             Ensure = 'Present'
             Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
             ValueName = 'Path'
-            ValueData = "$env:SystemRoot\system32;$env:SystemRoot;$env:SystemRoot\System32\Wbem;$env:SystemRoot\System32\WindowsPowerShell\v1.0\;${env:ProgramFiles(x86)}\Git\bin\"
+            ValueData = $( ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' )
             ValueType = 'ExpandString'
             DependsOn = '[Script]InstallGit'
         }  
@@ -206,20 +174,16 @@ Configuration Boot0 {
         script clonersConfigs {
             SetScript = {
                 $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 
+                Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
                 Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/') rsConfigs"
             }
 
             TestScript = {
                 $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs')) 
-                {
-                    return $true
-                }
+                {return $true}
                 else 
-                {
-                    return $false
-                }
+                {return $false}
             }
 
             GetScript = {
@@ -250,13 +214,9 @@ Configuration Boot0 {
             TestScript = {
                 $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsGit\DSCResources') 
-                {
-                    return $true
-                }
+                {return $true}
                 else 
-                {
-                    return $false
-                }
+                {return $false}
             }
 
             GetScript = {
@@ -268,13 +228,9 @@ Configuration Boot0 {
             DependsOn = '[File]rsPlatformDir'
         }
         Script GetMakeCert {
-            SetScript = {
-                (New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'makecert.exe'))
-            }
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'makecert.exe'))}
 
-            TestScript = {
-                Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') 
-            }
+            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe')}
 
             GetScript = {
                 return @{
@@ -283,15 +239,10 @@ Configuration Boot0 {
             }
             DependsOn = '[Script]clonersGit'
         }
-
         Script InstallMakeCert {
-            SetScript = {
-                Copy-Item -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') -Destination 'C:\Windows\System32' -Force
-            }
+            SetScript = {Copy-Item -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') -Destination 'C:\Windows\System32' -Force}
 
-            TestScript = {
-                Test-Path -Path 'C:\Windows\System32\makecert.exe' 
-            }
+            TestScript = {Test-Path -Path 'C:\Windows\System32\makecert.exe'}
 
             GetScript = {
                 return @{
@@ -305,31 +256,21 @@ Configuration Boot0 {
             SetScript = {
                 $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
                 Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                Where-Object -FilterScript {
-                    $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                } |
+                Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                 Remove-Item
-                & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
+                & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
             }
 
             TestScript = {
-                if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {
-                            $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                }) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
-                {
-                    return $true 
-                }
+                if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                {return $true}
                 else 
-                {
-                    return $false
-                }
+                {return $false}
             }
 
             GetScript = {
                 return @{
-                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {
-                            $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                        }
+                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
                     ).Thumbprint
                 }
             }
@@ -339,33 +280,21 @@ Configuration Boot0 {
         Script InstallRootCertificate {
             SetScript = {
                 Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-                Where-Object -FilterScript {
-                    $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                } |
+                Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                 Remove-Item
                 & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
             }
 
             TestScript = {
-                if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {
-                            $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                    }).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {
-                            $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                        }
+                if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
                 ).Thumbprint) 
-                {
-                    return $true 
-                }
+                {return $true}
                 else 
-                {
-                    return $false 
-                }
+                {return $false}
             }
             GetScript = {
                 return @{
-                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {
-                            $_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')
-                        }
+                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
                     ).Thumbprint
                 }
             }
