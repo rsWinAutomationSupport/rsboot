@@ -26,41 +26,40 @@ function Create-BootTask {
 }
 function Set-rsPlatform {
 @'
-        Configuration initDSC {
+    Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
         {
-        rsPlatform Modules
-        {
-        Ensure = "Present"
+            rsPlatform Modules
+            {
+                Ensure = "Present"
+            }
         }
-        }
-        }
-        initDSC -OutputPath 'C:\Windows\Temp' -Verbose
-        Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+    }
+    initDSC -OutputPath 'C:\Windows\Temp' -Verbose
+    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
 function Set-PullLCM {
 @'
-        [DSCLocalConfigurationManager()]
-        Configuration PullServerLCM
-        {
-   
+    [DSCLocalConfigurationManager()]
+    Configuration PullServerLCM
+    {
         Node $env:COMPUTERNAME
         {
-        Settings
-        {
-        ActionAfterReboot = 'ContinueConfiguration'
-        RebootNodeIfNeeded = $true
-        ConfigurationMode = 'ApplyAndAutoCorrect'
-        RefreshMode = 'Push'
-        ConfigurationModeFrequencyMins = 30
-        AllowModuleOverwrite = $true
+            Settings
+            {
+                ActionAfterReboot = 'ContinueConfiguration'
+                RebootNodeIfNeeded = $true
+                ConfigurationMode = 'ApplyAndAutoCorrect'
+                RefreshMode = 'Push'
+                ConfigurationModeFrequencyMins = 30
+                AllowModuleOverwrite = $true
+            }
         }
-        }
-        }
-        PullServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
-        Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+    }
+    PullServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
+    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 '@ | Invoke-Expression -Verbose
 }
 function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
