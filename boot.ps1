@@ -226,7 +226,7 @@ Configuration Boot0 {
                     'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe'))
                 }
             }
-            DependsOn = '[Script]clonersGit'
+            DependsOn = '[Script]ClonersPackageSourceManager'
         }
         Script InstallMakeCert {
             SetScript = {Copy-Item -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') -Destination 'C:\Windows\System32' -Force}
