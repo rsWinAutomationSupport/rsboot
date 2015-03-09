@@ -197,7 +197,7 @@ Configuration Boot0 {
             SetScript = {
                 $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                 Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
-                Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsrsPackageSourceManager.git"
+                Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
             }
 
             TestScript = {
