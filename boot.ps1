@@ -113,7 +113,7 @@ Configuration Boot0 {
         Script GetGit {
             SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
-            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')}
+            TestScript = {if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')) {return $true} else {return $false}}
 
             GetScript = {
                 return @{
@@ -122,22 +122,13 @@ Configuration Boot0 {
             }
             DependsOn = '[Script]Installwmf5'
         }
-
-        Script InstallGit {
-            SetScript = {Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe') -ArgumentList '/verysilent'}
-
-            TestScript = {
-                if(Test-Path -Path 'C:\Program Files (x86)\Git\bin\git.exe') 
-                {return $true}
-                else 
-                {return $false}
-            }
-
-            GetScript = {
-                return @{
-                    'Result' = $(Test-Path -Path 'C:\Program Files (x86)\Git\bin\git.exe')
-                }
-            }
+        Package InstallGit
+        {
+            Name = 'Git version 1.9.4-preview20140611'
+            Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
+            ProductId = ''
+            Arguments = '/verysilent'
+            Ensure = 'Present'
             DependsOn = '[Script]GetGit'
         }
         Registry SetGitPath
@@ -147,7 +138,7 @@ Configuration Boot0 {
             ValueName = 'Path'
             ValueData = $( ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' )
             ValueType = 'ExpandString'
-            DependsOn = '[Script]InstallGit'
+            DependsOn = '[Package]InstallGit'
         }  
         script UpdateGitConfig {
             SetScript = {
