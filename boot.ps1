@@ -311,20 +311,7 @@ Configuration Boot0 {
     }
   } 
 }
-
-Configuration Boot1 {
-
-  Node $env:COMPUTERNAME {
-      rsModuleZipSum CompressModules
-    {
-      Name = 'CompressModules'
-      modulePath = 'C:\Program Files\WindowsPowerShell\Modules'
-      destination = 'C:\Program Files\WindowsPowerShell\DscService\Modules'
-      dependsOn = '[rsPlatform]Modules'
-    } 
-  }
-}
-    
+   
    
 Create-Secrets
 Create-BootTask
@@ -332,6 +319,4 @@ Boot0 -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-PullLCM
 Set-rsPlatform
-Boot1 -OutputPath 'C:\Windows\Temp' -Verbose
-Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-#Set-Pull
+Set-Pull
