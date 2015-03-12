@@ -66,7 +66,7 @@ function Set-LCM {
                 Settings
                 {
                     AllowModuleOverwrite = 'True'
-                    ConfigurationID = [Guid}::NewGuid()
+                    ConfigurationID = [Guid]::NewGuid()
                     #CertificateID = $([Guid]::NewGuid()) Needs function to get Cert
                     ConfigurationModeFrequencyMins = 30
                     ConfigurationMode = 'ApplyAndAutoCorrect'
