@@ -113,7 +113,18 @@ Configuration Boot {
             }
             DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
         }
-        if( $PullServerIP -eq $null ){
+        Script GetMakeCert {
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
+
+            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe')}
+
+            GetScript = {
+                return @{
+                    'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe'))
+                }
+            }
+        }
+        if( [String]::IsNullOrEmpty($PullServerIP) ){
             Script GetGit {
                 SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
@@ -126,8 +137,7 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]Installwmf5'
             }
-            Package InstallGit
-            {
+            Package InstallGit {
                 Name = 'Git version 1.9.4-preview20140611'
                 Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
                 ProductId = ''
@@ -135,8 +145,7 @@ Configuration Boot {
                 Ensure = 'Present'
                 DependsOn = '[Script]GetGit'
             }
-            Registry SetGitPath
-            {       
+            Registry SetGitPath {       
                 Ensure = 'Present'
                 Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
                 ValueName = 'Path'
@@ -164,7 +173,7 @@ Configuration Boot {
                 }
                 DependsOn = '[Registry]SetGitPath'
             }
-            script clonersConfigs {
+            script Clone_rsConfigs {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
                     Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
@@ -187,15 +196,14 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]UpdateGitConfig'
             }
-            File rsPlatformDir
-            {
+            File rsPlatformDir {
                 SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPlatform'
                 DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
                 Type = 'Directory'
                 Recurse = $true
                 MatchSource = $true
                 Ensure = 'Present'
-                DependsOn = '[Script]clonersConfigs'
+                DependsOn = '[Script]Clone_rsConfigs'
             }
             script ClonersPackageSourceManager {
                 SetScript = {
@@ -220,43 +228,18 @@ Configuration Boot {
                 }
                 DependsOn = '[File]rsPlatformDir'
             }
-        }
-        Script GetMakeCert {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
-
-            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe')}
-
-            GetScript = {
-                return @{
-                    'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe'))
-                }
+            WindowsFeature IIS {
+                Ensure = 'Present'
+                Name = 'Web-Server'
+                DependsOn = '[File]PublicPullServerCert'
+            }
+            WindowsFeature DSCServiceFeature {
+                Ensure = 'Present'
+                Name = 'DSC-Service'
+                DependsOn = '[WindowsFeature]IIS'
             }
         }
-        if( $PullServerIP -eq $null ){
-            Script CreateEncryptionCertificate {
-                SetScript = {
-                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
-                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-                    Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
-                }
-                TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
-                    {return $true}
-                    else 
-                    {return $false}
-                }
-                GetScript = {
-                    return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
-                        ).Thumbprint
-                    }
-                }
-                DependsOn = '[Script]GetMakeCert'
-        }
-        }
-        else{
+        if( [String]::IsNullOrEmpty($PullServerIP) ){
             Script CreateServerCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
@@ -280,7 +263,31 @@ Configuration Boot {
                 DependsOn = '[Script]GetMakeCert'
             }
         }
-        if( $PullServerIP -eq $null ){
+        else{
+            Script CreateEncryptionCertificate {
+                SetScript = {
+                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
+                }
+                TestScript = {
+                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                        ).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]GetMakeCert'
+        }            
+        }
+        if( [String]::IsNullOrEmpty($PullServerIP) ){
             Script InstallRootCertificate {
                 SetScript = {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
@@ -311,17 +318,6 @@ Configuration Boot {
                 Type = 'File'
                 Checksum = 'SHA-256'
                 DependsOn = '[Script]CreateServerCertificate'
-            }
-            WindowsFeature IIS {
-                Ensure = 'Present'
-                Name = 'Web-Server'
-                DependsOn = '[File]PublicPullServerCert'
-            }
-            WindowsFeature DSCServiceFeature
-            {
-                Ensure = 'Present'
-                Name = 'DSC-Service'
-                DependsOn = '[WindowsFeature]IIS'
             }
         }
     } 
