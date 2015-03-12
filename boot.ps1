@@ -61,8 +61,36 @@ function Set-PullLCM {
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 '@ | Invoke-Expression -Verbose
 }
+function Set-ClientLCM {
+@'
+    [DSCLocalConfigurationManager()]
+    Configuration ClientLCM
+    {
+        Node $env:COMPUTERNAME
+        {
+            Settings
+            {
+               <# 
+                AllowModuleOverwrite = 'True'
+                ConfigurationID = [guid]::NewGuid()
+                CertificateID = $CertificateID
+                ConfigurationModeFrequencyMins = 30
+                ConfigurationMode = 'ApplyAndAutoCorrect'
+                RebootNodeIfNeeded = 'True'
+                RefreshMode = 'Pull'
+                RefreshFrequencyMins = 15
+                DownloadManagerName = 'WebDownloadManager'
+                DownloadManagerCustomData = (@{ServerUrl = $pullServerUri; AllowUnsecureConnection = "false"})
+                #>
+            }
+        }
+    }
+    ClientLCM -OutputPath 'C:\Windows\Temp' -Verbose
+    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+'@ | Invoke-Expression -Verbose
+}
 function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
-Configuration Boot0 {
+Configuration BootPull {
     node $env:COMPUTERNAME {
         script DevOpsDir {
             SetScript = {New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory -Verbose}
@@ -311,12 +339,22 @@ Configuration Boot0 {
         }
     } 
 }
-    
-   
-Create-Secrets
-Create-BootTask
-Boot0 -OutputPath 'C:\Windows\Temp' -Verbose
-Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-Set-PullLCM
-Set-rsPlatform
-Set-Pull
+Configuration BootClient{
+    node $env:COMPUTERNAME {
+    }
+}
+  
+if($PSBoundParameters.ContainsKey('PullServerIP')){
+    BootClient -OutputPath 'C:\Windows\Temp' -Verbose
+    Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+    Set-ClientLCM
+}
+else{
+    Create-Secrets
+    Create-BootTask
+    BootPull -OutputPath 'C:\Windows\Temp' -Verbose
+    Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+    Set-PullLCM
+    Set-rsPlatform
+    Set-Pull
+}
