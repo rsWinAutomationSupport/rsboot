@@ -113,7 +113,7 @@ Configuration Boot {
             }
             DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
         }
-        if( -not $PSBoundParameters.ContainsKey(('PullServerIP') ){
+        if( -not $PSBoundParameters.ContainsKey('PullServerIP') ){
             Script GetGit {
                 SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
