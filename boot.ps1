@@ -222,7 +222,7 @@ Configuration Boot {
             }
         }
         Script GetMakeCert {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'makecert.exe'))}
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
 
             TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe')}
 
@@ -231,84 +231,99 @@ Configuration Boot {
                     'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe'))
                 }
             }
-            DependsOn = '[Script]ClonersPackageSourceManager'
+            #DependsOn = '[Script]ClonersPackageSourceManager'
         }
-        Script InstallMakeCert {
-            SetScript = {Copy-Item -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe') -Destination 'C:\Windows\System32' -Force}
-
-            TestScript = {Test-Path -Path 'C:\Windows\System32\makecert.exe'}
-
-            GetScript = {
-                return @{
-                    'Result' = $(Test-Path  -Path 'C:\Windows\System32\makecert.exe')
+        if( $PSBoundParameters.ContainsKey('PullServerIP') ){
+            Script CreateEncryptionCertificate {
+                SetScript = {
+                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
                 }
-            }
-
-            DependsOn = '[Script]GetMakeCert'
-        }
-        Script CreateServerCertificate {
-            SetScript = {
-                $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
-                Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-                Remove-Item
-                & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
-            }
-            TestScript = {
-                if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
-                {return $true}
-                else 
-                {return $false}
-            }
-            GetScript = {
-                return @{
-                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
-                    ).Thumbprint
+                TestScript = {
+                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                    {return $true}
+                    else 
+                    {return $false}
                 }
-            }
-            DependsOn = '[Script]InstallMakeCert'
-        }
-        Script InstallRootCertificate {
-            SetScript = {
-                Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-                Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-                Remove-Item
-                & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
-            }
-            TestScript = {
-                if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
-                ).Thumbprint) 
-                {return $true}
-                else 
-                {return $false}
-            }
-            GetScript = {
-                return @{
-                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
-                    ).Thumbprint
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                        ).Thumbprint
+                    }
                 }
+                DependsOn = '[Script]GetMakeCert'
+        }
+        }
+        else{
+            Script CreateServerCertificate {
+                SetScript = {
+                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
+                }
+                TestScript = {
+                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                        ).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]GetMakeCert'
             }
-            DependsOn = '[Script]CreateServerCertificate'
         }
-        File PublicPullServerCert {
-            Ensure = 'Present'
-            SourcePath = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
-            DestinationPath = 'C:\inetpub\wwwroot'
-            MatchSource = $true
-            Type = 'File'
-            Checksum = 'SHA-256'
-            DependsOn = '[Script]CreateServerCertificate'
-        }
-        WindowsFeature IIS {
-            Ensure = 'Present'
-            Name = 'Web-Server'
-            DependsOn = '[File]PublicPullServerCert'
-        }
-        WindowsFeature DSCServiceFeature
-        {
-            Ensure = 'Present'
-            Name = 'DSC-Service'
-            DependsOn = '[WindowsFeature]IIS'
+        if( -not $PSBoundParameters.ContainsKey('PullServerIP') ){
+            Script InstallRootCertificate {
+                SetScript = {
+                    Get-ChildItem -Path Cert:\LocalMachine\Root\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
+                }
+                TestScript = {
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                    ).Thumbprint) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                        ).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]CreateServerCertificate'
+            }
+            File PublicPullServerCert {
+                Ensure = 'Present'
+                SourcePath = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
+                DestinationPath = 'C:\inetpub\wwwroot'
+                MatchSource = $true
+                Type = 'File'
+                Checksum = 'SHA-256'
+                DependsOn = '[Script]CreateServerCertificate'
+            }
+            WindowsFeature IIS {
+                Ensure = 'Present'
+                Name = 'Web-Server'
+                DependsOn = '[File]PublicPullServerCert'
+            }
+            WindowsFeature DSCServiceFeature
+            {
+                Ensure = 'Present'
+                Name = 'DSC-Service'
+                DependsOn = '[WindowsFeature]IIS'
+            }
         }
     } 
 }
