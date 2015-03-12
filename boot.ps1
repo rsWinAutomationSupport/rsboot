@@ -26,44 +26,47 @@ function Create-BootTask {
 function Set-rsPlatform {
   @'
     Configuration initDSC {
-    Import-DscResource -ModuleName rsPlatform
-    Node $env:COMPUTERNAME
-    {
-    rsPlatform Modules
-    {
-    Ensure = "Present"
-    }
-    }
+        Import-DscResource -ModuleName rsPlatform
+        Node $env:COMPUTERNAME
+        {
+            rsPlatform Modules
+            {
+                Ensure = "Present"
+            }
+        }
     }
     initDSC -OutputPath 'C:\Windows\Temp' -Verbose
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
-  @'
+@'
     [DSCLocalConfigurationManager()]
-    Configuration PullServerLCM
+    Configuration ServerLCM
     {
-    Node $env:COMPUTERNAME
-    {
-    Settings
-    {
-    ActionAfterReboot = 'ContinueConfiguration'
-    RebootNodeIfNeeded = $true
-    ConfigurationMode = 'ApplyAndAutoCorrect'
-    RefreshMode = 'Push'
-    ConfigurationModeFrequencyMins = 30
-    AllowModuleOverwrite = $true
+        Node $env:COMPUTERNAME
+        {
+            Settings
+            {
+                ActionAfterReboot = 'ContinueConfiguration'
+                RebootNodeIfNeeded = $true
+                ConfigurationMode = 'ApplyAndAutoCorrect'
+                RefreshMode = 'Push'
+                ConfigurationModeFrequencyMins = 30
+                AllowModuleOverwrite = $true
+            }
+        }
     }
-    }
-    }
-    PullServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
+    ServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 '@ | Invoke-Expression -Verbose
 }
 function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
 
 Configuration Boot {
+    param(
+        [String] $PullServerIP
+    )
     node $env:COMPUTERNAME {
         script DevOpsDir {
             SetScript = {New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory -Verbose}
@@ -110,111 +113,113 @@ Configuration Boot {
             }
             DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
         }
-        Script GetGit {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
+        if( -not $PSBoundParameters.ContainsKey(('PullServerIP') ){
+            Script GetGit {
+                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
-            TestScript = {if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')) {return $true} else {return $false}}
+                TestScript = {if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')) {return $true} else {return $false}}
 
-            GetScript = {
-                return @{
-                    'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe'))
+                GetScript = {
+                    return @{
+                        'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe'))
+                    }
                 }
+                DependsOn = '[Script]Installwmf5'
             }
-            DependsOn = '[Script]Installwmf5'
-        }
-        Package InstallGit
-        {
-            Name = 'Git version 1.9.4-preview20140611'
-            Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
-            ProductId = ''
-            Arguments = '/verysilent'
-            Ensure = 'Present'
-            DependsOn = '[Script]GetGit'
-        }
-        Registry SetGitPath
-        {       
-            Ensure = 'Present'
-            Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
-            ValueName = 'Path'
-            ValueData = $( ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' )
-            ValueType = 'ExpandString'
-            DependsOn = '[Package]InstallGit'
-        }  
-        script UpdateGitConfig {
-            SetScript = {
-                Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
-                Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.name $env:COMPUTERNAME"
+            Package InstallGit
+            {
+                Name = 'Git version 1.9.4-preview20140611'
+                Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
+                ProductId = ''
+                Arguments = '/verysilent'
+                Ensure = 'Present'
+                DependsOn = '[Script]GetGit'
             }
-
-            TestScript = {
-                if( (Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -match $env:COMPUTERNAME )
-                { return $true }
-                else
-                { return $false }
-            }
-
-            GetScript = {
-                return @{
-                    'Result' = $((Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -contains $env:COMPUTERNAME)
+            Registry SetGitPath
+            {       
+                Ensure = 'Present'
+                Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
+                ValueName = 'Path'
+                ValueData = $( ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' )
+                ValueType = 'ExpandString'
+                DependsOn = '[Package]InstallGit'
+            }  
+            script UpdateGitConfig {
+                SetScript = {
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.name $env:COMPUTERNAME"
                 }
-            }
-            DependsOn = '[Registry]SetGitPath'
-        }
-        script clonersConfigs {
-            SetScript = {
-                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
-                Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/') rsConfigs"
-            }
 
-            TestScript = {
-                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs')) 
-                {return $true}
-                else 
-                {return $false}
-            }
-
-            GetScript = {
-                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                return @{
-                    'Result' = (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR)) -PathType Container)
+                TestScript = {
+                    if( (Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -match $env:COMPUTERNAME )
+                    { return $true }
+                    else
+                    { return $false }
                 }
-            }
-            DependsOn = '[Script]UpdateGitConfig'
-        }
-        File rsPlatformDir
-        {
-            SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPlatform'
-            DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
-            Type = 'Directory'
-            Recurse = $true
-            MatchSource = $true
-            Ensure = 'Present'
-            DependsOn = '[Script]clonersConfigs'
-        }
-        script ClonersPackageSourceManager {
-            SetScript = {
-                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
-                Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
-            }
 
-            TestScript = {
-                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources') 
-                {return $true}
-                else 
-                {return $false}
-            }
-
-            GetScript = {
-                $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                return @{
-                    'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources' -PathType Container)
+                GetScript = {
+                    return @{
+                        'Result' = $((Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -contains $env:COMPUTERNAME)
+                    }
                 }
+                DependsOn = '[Registry]SetGitPath'
             }
-            DependsOn = '[File]rsPlatformDir'
+            script clonersConfigs {
+                SetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/') rsConfigs"
+                }
+
+                TestScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs')) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+
+                GetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    return @{
+                        'Result' = (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR)) -PathType Container)
+                    }
+                }
+                DependsOn = '[Script]UpdateGitConfig'
+            }
+            File rsPlatformDir
+            {
+                SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPlatform'
+                DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
+                Type = 'Directory'
+                Recurse = $true
+                MatchSource = $true
+                Ensure = 'Present'
+                DependsOn = '[Script]clonersConfigs'
+            }
+            script ClonersPackageSourceManager {
+                SetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
+                }
+
+                TestScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources') 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+
+                GetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    return @{
+                        'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources' -PathType Container)
+                    }
+                }
+                DependsOn = '[File]rsPlatformDir'
+            }
         }
         Script GetMakeCert {
             SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'makecert.exe'))}
@@ -249,21 +254,18 @@ Configuration Boot {
                 Remove-Item
                 & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
             }
-
             TestScript = {
                 if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
                 {return $true}
                 else 
                 {return $false}
             }
-
             GetScript = {
                 return @{
                     'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
                     ).Thumbprint
                 }
             }
-      
             DependsOn = '[Script]InstallMakeCert'
         }
         Script InstallRootCertificate {
@@ -273,7 +275,6 @@ Configuration Boot {
                 Remove-Item
                 & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
             }
-
             TestScript = {
                 if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
                 ).Thumbprint) 
