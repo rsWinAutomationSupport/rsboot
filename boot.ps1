@@ -7,17 +7,19 @@ $VerbosePreference = 'Continue'
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
-  if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
-  else {
-    $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
-    foreach($key in $keys){
-      if($secrets.keys -notcontains $key){ 
-        Write-Verbose "$key key is missing from secrets parameter"
-        exit
+  if( [String]::IsNullOrEmpty($PullServerIP) ){
+      if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
+      else {
+        $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
+        foreach($key in $keys){
+          if($secrets.keys -notcontains $key){ 
+            Write-Verbose "$key key is missing from secrets parameter"
+            exit
+          }
+          if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
+          Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2) -Verbose
+        }
       }
-      if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
-      Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2) -Verbose
-    }
   }
 }
 function Create-BootTask {
