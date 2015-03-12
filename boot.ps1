@@ -358,7 +358,6 @@ Configuration BootClient{
               'Result' = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
             }
           }
-          DependsOn = '[Script]DevOpsDir'
         }
         Script InstallWmf5 {
           SetScript = {
@@ -376,7 +375,7 @@ Configuration BootClient{
               'Result' = $PSVersionTable.PSVersion.Major
             }
           }
-          DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
+          DependsOn = @('[Script]GetWMF5')
         }
     }
 }
