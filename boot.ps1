@@ -40,26 +40,46 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
-@'
+    param(
+        [String] $PullServerIP
+    )
+@"
     [DSCLocalConfigurationManager()]
-    Configuration ServerLCM
+    Configuration LCM
     {
         Node $env:COMPUTERNAME
         {
-            Settings
-            {
-                ActionAfterReboot = 'ContinueConfiguration'
-                RebootNodeIfNeeded = $true
-                ConfigurationMode = 'ApplyAndAutoCorrect'
-                RefreshMode = 'Push'
-                ConfigurationModeFrequencyMins = 30
-                AllowModuleOverwrite = $true
+            if( [String]::IsNullOrEmpty($PullServerIP) ){
+                Settings
+                {
+                    ActionAfterReboot = 'ContinueConfiguration'
+                    RebootNodeIfNeeded = $true
+                    ConfigurationMode = 'ApplyAndAutoCorrect'
+                    RefreshMode = 'Push'
+                    ConfigurationModeFrequencyMins = 30
+                    AllowModuleOverwrite = $true
+                }
+            }
+            else {
+                Settings
+                {
+                    AllowModuleOverwrite = 'True'
+                    ConfigurationID = [Guid}::NewGuid()
+                    #CertificateID = $([Guid]::NewGuid()) Needs function to get Cert
+                    ConfigurationModeFrequencyMins = 30
+                    ConfigurationMode = 'ApplyAndAutoCorrect'
+                    RebootNodeIfNeeded = 'True'
+                    RefreshMode = 'Pull'
+                    RefreshFrequencyMins = 15
+                    DownloadManagerName = 'WebDownloadManager'
+                    #DownloadManagerCustomData = (@{ServerUrl = $pullServerIP; AllowUnsecureConnection = "false"})
+                }
             }
         }
     }
-    ServerLCM -OutputPath 'C:\Windows\Temp' -Verbose
+    LCM -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
-'@ | Invoke-Expression -Verbose
+"@ | Invoke-Expression -Verbose
 }
 function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
 
@@ -228,18 +248,6 @@ Configuration Boot {
                 }
                 DependsOn = '[File]rsPlatformDir'
             }
-            WindowsFeature IIS {
-                Ensure = 'Present'
-                Name = 'Web-Server'
-                DependsOn = '[File]PublicPullServerCert'
-            }
-            WindowsFeature DSCServiceFeature {
-                Ensure = 'Present'
-                Name = 'DSC-Service'
-                DependsOn = '[WindowsFeature]IIS'
-            }
-        }
-        if( [String]::IsNullOrEmpty($PullServerIP) ){
             Script CreateServerCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
@@ -262,32 +270,16 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
-        }
-        else{
-            Script CreateEncryptionCertificate {
-                SetScript = {
-                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
-                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-                    Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
-                }
-                TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
-                    {return $true}
-                    else 
-                    {return $false}
-                }
-                GetScript = {
-                    return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
-                        ).Thumbprint
-                    }
-                }
-                DependsOn = '[Script]GetMakeCert'
-        }            
-        }
-        if( [String]::IsNullOrEmpty($PullServerIP) ){
+            WindowsFeature IIS {
+                Ensure = 'Present'
+                Name = 'Web-Server'
+                DependsOn = '[File]PublicPullServerCert'
+            }
+            WindowsFeature DSCServiceFeature {
+                Ensure = 'Present'
+                Name = 'DSC-Service'
+                DependsOn = '[WindowsFeature]IIS'
+            }
             Script InstallRootCertificate {
                 SetScript = {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
@@ -320,6 +312,30 @@ Configuration Boot {
                 DependsOn = '[Script]CreateServerCertificate'
             }
         }
+        else{
+            Script CreateEncryptionCertificate {
+                SetScript = {
+                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
+                }
+                TestScript = {
+                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                        ).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]GetMakeCert'
+        }            
+        }
     } 
 }
   
@@ -327,6 +343,8 @@ Create-BootTask
 Create-Secrets
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-Set-LCM
-Set-rsPlatform
-Set-Pull
+Set-LCM -PullServerIP $PullServerIP
+if( [String]::IsNullOrEmpty($PullServerIP) ){
+    Set-rsPlatform
+    Set-Pull
+}
