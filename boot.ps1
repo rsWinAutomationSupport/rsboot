@@ -348,6 +348,36 @@ Configuration Boot0 {
 }
 Configuration BootClient{
     node $env:COMPUTERNAME {
+        Script GetWMF5 {
+          SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'WindowsBlue-KB3037315-x64.msu'))}
+
+          TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')}
+
+          GetScript = {
+            return @{
+              'Result' = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
+            }
+          }
+          DependsOn = '[Script]DevOpsDir'
+        }
+        Script InstallWmf5 {
+          SetScript = {
+            Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu') -ArgumentList '/quiet' -Verbose
+            $global:DSCMachineStatus = 1 
+          }
+          TestScript = {
+            if($PSVersionTable.PSVersion.Major -ge 5) 
+            {return $true}
+            else 
+            {return $false}
+          }
+          GetScript = {
+            return @{
+              'Result' = $PSVersionTable.PSVersion.Major
+            }
+          }
+          DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
+        }
     }
 }
   
