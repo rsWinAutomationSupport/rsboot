@@ -321,17 +321,18 @@ Configuration Boot {
                     Get-ChildItem -Path Cert:\LocalMachine\My\ |
                     Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                     Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
+                    $cN = "CN=" + $env:COMPUTERNAME + "_enc"
+                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss my, -sr localmachine, -len 2048
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                    if( (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} )
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
                         ).Thumbprint
                     }
                 }
