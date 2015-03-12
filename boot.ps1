@@ -55,26 +55,26 @@ function Set-LCM {
                 Settings
                 {
                     ActionAfterReboot = 'ContinueConfiguration'
-                    RebootNodeIfNeeded = $true
+                    RebootNodeIfNeeded = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
                     RefreshMode = 'Push'
                     ConfigurationModeFrequencyMins = 30
-                    AllowModuleOverwrite = $true
+                    AllowModuleOverwrite = 1
                 }
             }
             else {
-                Settings
-                {
-                    AllowModuleOverwrite = 'True'
-                    ConfigurationID = [Guid]::NewGuid()
-                    #CertificateID = $([Guid]::NewGuid()) Needs function to get Cert
-                    ConfigurationModeFrequencyMins = 30
+                Settings {
+                    AllowModuleOverwrite = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
-                    RebootNodeIfNeeded = 'True'
                     RefreshMode = 'Pull'
-                    RefreshFrequencyMins = 15
-                    DownloadManagerName = 'WebDownloadManager'
-                    #DownloadManagerCustomData = (@{ServerUrl = $pullServerIP; AllowUnsecureConnection = "false"})
+                    ConfigurationID = [Guid]::NewGuid()
+                }
+
+                ConfigurationRepositoryWeb DSCHTTPS {
+                    Name= 'DSCHTTPS'
+                    ServerURL = "https://$PullServerIP:8080/PSDSCPullServer.svc"
+                    #CertificateID = 'D09D21D12916BFB09B40E7568A7434A6EABFD9BA'
+                    AllowUnsecureConnection = $False
                 }
             }
         }
