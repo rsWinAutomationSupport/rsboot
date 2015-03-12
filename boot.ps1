@@ -325,7 +325,7 @@ Configuration Boot {
                     & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss my, -sr localmachine, -len 2048
                 }
                 TestScript = {
-                    if( (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} )
+                    if( (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
                     {return $true}
                     else 
                     {return $false}
