@@ -39,7 +39,7 @@ function Set-rsPlatform {
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
-function Set-PullLCM {
+function Set-LCM {
   @'
     [DSCLocalConfigurationManager()]
     Configuration PullServerLCM
@@ -61,37 +61,9 @@ function Set-PullLCM {
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 '@ | Invoke-Expression -Verbose
 }
-function Set-ClientLCM {
-@'
-    [DSCLocalConfigurationManager()]
-    Configuration ClientLCM
-    {
-        Node $env:COMPUTERNAME
-        {
-            Settings
-            {
-               <# 
-                AllowModuleOverwrite = 'True'
-                ConfigurationID = [guid]::NewGuid()
-                CertificateID = $CertificateID
-                ConfigurationModeFrequencyMins = 30
-                ConfigurationMode = 'ApplyAndAutoCorrect'
-                RebootNodeIfNeeded = 'True'
-                RefreshMode = 'Pull'
-                RefreshFrequencyMins = 15
-                DownloadManagerName = 'WebDownloadManager'
-                DownloadManagerCustomData = (@{ServerUrl = $pullServerUri; AllowUnsecureConnection = "false"})
-                #>
-            }
-        }
-    }
-    ClientLCM -OutputPath 'C:\Windows\Temp' -Verbose
-    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
-'@ | Invoke-Expression -Verbose
-}
 function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
 
-Configuration BootPull {
+Configuration Boot {
     node $env:COMPUTERNAME {
         script DevOpsDir {
             SetScript = {New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory -Verbose}
@@ -339,51 +311,11 @@ Configuration BootPull {
         }
     } 
 }
-Configuration BootClient{
-    node $env:COMPUTERNAME {
-        Script GetWMF5 {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'WindowsBlue-KB3037315-x64.msu'))}
-
-            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')}
-
-            GetScript = {
-                return @{
-                    'Result' = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
-                }
-            }
-        }
-        Script InstallWmf5 {
-            SetScript = {
-                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu') -ArgumentList '/quiet' -Verbose
-                $global:DSCMachineStatus = 1 
-            }
-            TestScript = {
-                if($PSVersionTable.PSVersion.Major -ge 5) 
-                {return $true}
-                else 
-                {return $false}
-            }
-            GetScript = {
-                return @{
-                    'Result' = $PSVersionTable.PSVersion.Major
-                }
-            }
-            DependsOn = @('[Script]GetWMF5')
-        }
-    }
-}
   
 Create-BootTask
-if($PSBoundParameters.ContainsKey('PullServerIP')){
-    BootClient -OutputPath 'C:\Windows\Temp' -Verbose
-    Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-    Set-ClientLCM
-}
-else{
-    Create-Secrets
-    BootPull -OutputPath 'C:\Windows\Temp' -Verbose
-    Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-    Set-PullLCM
-    Set-rsPlatform
-    Set-Pull
-}
+Create-Secrets
+Boot -OutputPath 'C:\Windows\Temp' -Verbose
+Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+Set-LCM
+Set-rsPlatform
+Set-Pull
