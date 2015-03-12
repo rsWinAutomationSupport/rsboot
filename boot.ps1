@@ -113,7 +113,7 @@ Configuration Boot {
             }
             DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
         }
-        if( -not $PSBoundParameters.ContainsKey('PullServerIP') ){
+        if( $PullServerIP -eq $null ){
             Script GetGit {
                 SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
@@ -231,9 +231,8 @@ Configuration Boot {
                     'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'makecert.exe'))
                 }
             }
-            #DependsOn = '[Script]ClonersPackageSourceManager'
         }
-        if( $PSBoundParameters.ContainsKey('PullServerIP') ){
+        if( $PullServerIP -ne $null ){
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
@@ -281,7 +280,7 @@ Configuration Boot {
                 DependsOn = '[Script]GetMakeCert'
             }
         }
-        if( -not $PSBoundParameters.ContainsKey('PullServerIP') ){
+        if( $PullServerIP -eq $null ){
             Script InstallRootCertificate {
                 SetScript = {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
