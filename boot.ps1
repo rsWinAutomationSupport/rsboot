@@ -337,7 +337,7 @@ Configuration Boot {
                     }
                 }
                 DependsOn = '[Script]GetMakeCert'
-        }            
+            }       
         }
     } 
 }
