@@ -351,6 +351,7 @@ Configuration BootClient{
     }
 }
   
+Create-BootTask
 if($PSBoundParameters.ContainsKey('PullServerIP')){
     BootClient -OutputPath 'C:\Windows\Temp' -Verbose
     Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
@@ -358,7 +359,6 @@ if($PSBoundParameters.ContainsKey('PullServerIP')){
 }
 else{
     Create-Secrets
-    Create-BootTask
     BootPull -OutputPath 'C:\Windows\Temp' -Verbose
     Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
     Set-PullLCM
