@@ -1,6 +1,6 @@
 ﻿param (
   [String] $defaultPath  = 'C:\DevOps',
-  [string] $PullServerIP,
+  [string] $PullServerIP = $null,
   [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue' 
@@ -232,7 +232,7 @@ Configuration Boot {
                 }
             }
         }
-        if( $PullServerIP -ne $null ){
+        if( $PullServerIP -eq $null ){
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
