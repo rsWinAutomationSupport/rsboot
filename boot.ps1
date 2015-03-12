@@ -315,7 +315,7 @@ Configuration Boot {
   
 Create-BootTask
 Create-Secrets
-Boot -OutputPath 'C:\Windows\Temp' -Verbose
+Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM
 Set-rsPlatform
