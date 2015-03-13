@@ -7,7 +7,7 @@ $VerbosePreference = 'Continue'
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
-  if( [String]::IsNullOrEmpty($PullServerIP) ){
+  if( !($PullServerIP) ){
       if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
       else {
         $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
@@ -51,7 +51,7 @@ function Set-LCM {
     {
         Node $env:COMPUTERNAME
         {
-            if( [String]::IsNullOrEmpty($PullServerIP) ){
+            if( !($PullServerIP) ){
                 Settings
                 {
                     ActionAfterReboot = 'ContinueConfiguration'
@@ -146,7 +146,7 @@ Configuration Boot {
                 }
             }
         }
-        if( [String]::IsNullOrEmpty($PullServerIP) ){
+        if( !($PullServerIP) ){
             Script GetGit {
                 SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
@@ -347,7 +347,7 @@ Create-Secrets
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM -PullServerIP $PullServerIP
-if( [String]::IsNullOrEmpty($PullServerIP) ){
+if( !($PullServerIP) ){
     Set-rsPlatform
     Set-Pull
 }
