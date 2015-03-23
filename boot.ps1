@@ -160,7 +160,7 @@ Configuration Boot {
                 DependsOn = '[Script]Installwmf5'
             }
             Package InstallGit {
-                Name = 'Git version 1.9.4-preview20140611'
+                Name = 'Git version 1.9.5-preview20150319'
                 Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
                 ProductId = ''
                 Arguments = '/verysilent'
