@@ -1,32 +1,43 @@
 ﻿param (
-  [String] $defaultPath  = 'C:\DevOps',
-  [string] $PullServerIP = $null,
-  [Hashtable] $secrets
+    [String] $defaultPath  = 'C:\DevOps',
+    [string] $PullServerIP = $null,
+    [string] $PullServerName = 'PullServer',
+    [int] $PullServerPort = 8080,
+    [Hashtable] $secrets
 )
 $VerbosePreference = 'Continue' 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
-  if( !($PullServerIP) ){
-      if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
-      else {
-        $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
-        foreach($key in $keys){
-          if($secrets.keys -notcontains $key){ 
-            Write-Verbose "$key key is missing from secrets parameter"
-            exit
-          }
-          if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
-          Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2) -Verbose
+    if(!($PullServerIP)){
+        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
+        else {
+            $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
+            foreach($key in $keys){
+                if($secrets.keys -notcontains $key){ 
+                    Write-Verbose "$key key is missing from secrets parameter"
+                    exit
+                }
+                if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
+                Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2) -Verbose
+            }
         }
-      }
-  }
+    }
+    else{
+        $bootstrapinfo = @{
+            'IP' = $PullServerIP
+            'Name' = $PullServerName
+            'Port' = $PullServerPort
+            'MyGuid' = [Guid]::NewGuid().Guid
+        }
+        Set-Content -Path (Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') -Value $($bootstrapinfo | ConvertTo-Json) -Verbose
+    }
 }
 function Create-BootTask {
-  if(!(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue)) {Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""}
+    if(!(Get-ScheduledTask -TaskName 'Boot' -ErrorAction SilentlyContinue)) {Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn Boot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""}
 }
 function Set-rsPlatform {
-  @'
+    @'
     Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
@@ -45,7 +56,7 @@ function Set-LCM {
     param(
         [String] $PullServerIP
     )
-@"
+    @"
     [DSCLocalConfigurationManager()]
     Configuration LCM
     {
@@ -72,8 +83,8 @@ function Set-LCM {
 
                 ConfigurationRepositoryWeb DSCHTTPS {
                     Name= 'DSCHTTPS'
-                    ServerURL = "https://$PullServerIP:8080/PSDSCPullServer.svc"
-                    #CertificateID = 'D09D21D12916BFB09B40E7568A7434A6EABFD9BA'
+                    ServerURL = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)/PSDSCPullServer.svc"
+                    #CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($bootstrapinfo.Name)").Thumbprint
                     AllowUnsecureConnection = $False
                 }
             }
@@ -146,9 +157,9 @@ Configuration Boot {
                 }
             }
         }
-        if( !($PullServerIP) ){
+        if(!($PullServerIP)){
             Script GetGit {
-                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/v1.9.4/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
+                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
 
                 TestScript = {if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')) {return $true} else {return $false}}
 
@@ -160,7 +171,7 @@ Configuration Boot {
                 DependsOn = '[Script]Installwmf5'
             }
             Package InstallGit {
-                Name = 'Git version 1.9.4-preview20140611'
+                Name = 'Git version 1.9.5-preview20150319'
                 Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
                 ProductId = ''
                 Arguments = '/verysilent'
@@ -318,11 +329,9 @@ Configuration Boot {
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
-                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-                    Remove-Item
                     $cN = "CN=" + $env:COMPUTERNAME + "_enc"
-                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss my, -sr localmachine, -len 2048
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
+                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss root, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
                 }
                 TestScript = {
                     if( (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
@@ -337,7 +346,66 @@ Configuration Boot {
                     }
                 }
                 DependsOn = '[Script]GetMakeCert'
-            }       
+            }
+            WindowsFeature MSMQ {
+                Name = "MSMQ"
+                Ensure = "Present"
+            }
+            Script GetPullPublicCert {
+                SetScript = {
+                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    $store = Get-Item Cert:\LocalMachine\Root
+                    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]"ReadWrite")
+                    $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+                    $store.Close()
+                }
+                TestScript = {
+                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    if( (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()) ).count -eq 0 ){return $false}
+                    else {return $true}
+                }
+                GetScript = {
+                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    return @{
+                        'Result' = (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()))
+                    }
+                }
+            }
+            Script SendClientPublicCert {
+                SetScript = {
+                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    [Reflection.Assembly]::LoadWithPartialName("System.Messaging") | Out-Null
+                    $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
+                    $msgbody = @{'Name' = "$env:COMPUTERNAME"
+                        'GUID' = $($bootstrapinfo.MyGuid)
+                        'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
+                    } | ConvertTo-Json
+                    $msg = New-Object System.Messaging.Message
+                    $msg.Label = 'execute'
+                    $msg.Body = $msgbody
+                    $queueName = "FormatName:DIRECT=HTTP://$($bootstrapinfo.IP)/msmq/private$/rsdsc"
+                    $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
+                    $queue.Send($msg)
+                }
+                TestScript = { Return $false }
+                GetScript = {
+                    return @{
+                        'Result' = $true
+                    }
+                }
+            }                
         }
     } 
 }
