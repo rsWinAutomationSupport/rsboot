@@ -10,7 +10,7 @@ $VerbosePreference = 'Continue'
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
     if(!($PullServerIP)){
-        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$global:d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
+        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json | Set-Variable -Name d -Scope Global}
         else {
             $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
             foreach($key in $keys){
@@ -24,13 +24,18 @@ function Create-Secrets {
         }
     }
     else{
-        $bootstrapinfo = @{
-            'IP' = $PullServerIP
-            'Name' = $PullServerName
-            'Port' = $PullServerPort
-            'MyGuid' = [Guid]::NewGuid().Guid
+        if( Test-Path 'C:\Windows\Temp\bootstrapinfo.json' ) {
+            Get-Content 'C:\Windows\Temp\bootstrapinfo.json' | ConvertFrom-Json | Set-Variable -Name bootstrapinfo -Scope Global
         }
-        Set-Content -Path (Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') -Value $($bootstrapinfo | ConvertTo-Json) -Verbose
+        else{
+            $bootstrapinfo = @{
+                'IP' = $PullServerIP
+                'Name' = $PullServerName
+                'Port' = $PullServerPort
+                'MyGuid' = [Guid]::NewGuid().Guid
+            }
+            Set-Content -Path 'C:\Windows\Temp\bootstrapinfo.json' -Value $($bootstrapinfo | ConvertTo-Json) -Verbose
+        }
     }
 }
 function Create-BootTask {
