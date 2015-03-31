@@ -95,7 +95,7 @@ function Set-LCM {
         Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json | Set-Variable -Name bootstrapinfo -Scope Global
     }
     LCM -OutputPath 'C:\Windows\Temp' -Verbose
-    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose -Force
 "@ | Invoke-Expression -Verbose
 }
 function Set-Pull {
@@ -418,7 +418,7 @@ Create-BootTask
 Create-Secrets
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-Set-LCM -PullServerIP $PullServerIP
+Set-LCM
 if( !($PullServerIP) ){
     Set-rsPlatform
     Set-Pull
