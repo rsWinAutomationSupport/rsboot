@@ -10,7 +10,7 @@ $VerbosePreference = 'Continue'
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
     if(!($PullServerIP)){
-        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
+        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {$global:d = Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json}
         else {
             $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
             foreach($key in $keys){
