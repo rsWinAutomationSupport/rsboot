@@ -80,7 +80,7 @@ function Set-LCM {
                 ConfigurationRepositoryWeb DSCHTTPS {
                     Name= 'DSCHTTPS'
                     ServerURL = "https://$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc"
-                    #CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($bootstrapinfo.Name)").Thumbprint
+                    CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($bootstrapinfo.Name)").Thumbprint
                     AllowUnsecureConnection = 0
                 }
             }
