@@ -302,9 +302,8 @@ Configuration Boot {
             }
             Script InstallRootCertificate {
                 SetScript = {
-                    Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-                    Remove-Item
+                    Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} | Remove-Item -Force -ErrorAction SilentlyContinue
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} | Remove-Item -Force -ErrorAction SilentlyContinue
                     & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
                 }
                 TestScript = {
