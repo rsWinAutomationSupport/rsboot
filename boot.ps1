@@ -95,7 +95,7 @@ function Set-LCM {
         Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json | Set-Variable -Name bootstrapinfo -Scope Global
     }
     LCM -OutputPath 'C:\Windows\Temp' -Verbose
-    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose -Force
+    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 "@ | Invoke-Expression -Verbose
 }
 function Set-Pull {
