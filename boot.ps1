@@ -371,7 +371,7 @@ Configuration Boot {
                     $store.Close()
                 }
                 TestScript = {
-                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json') -Raw | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json
                     $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -380,7 +380,7 @@ Configuration Boot {
                     else {return $true}
                 }
                 GetScript = {
-                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json') -Raw | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json
                     $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -392,7 +392,7 @@ Configuration Boot {
             }
             Script SendClientPublicCert {
                 SetScript = {
-                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json') -Raw | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json
                     [Reflection.Assembly]::LoadWithPartialName("System.Messaging") | Out-Null
                     $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
