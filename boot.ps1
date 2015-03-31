@@ -94,7 +94,10 @@ function Set-LCM {
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 "@ | Invoke-Expression -Verbose
 }
-function Set-Pull {Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPullServer.ps1') -Verbose}
+function Set-Pull {
+  $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+  Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
+  }
 
 Configuration Boot {
     param(
@@ -208,21 +211,21 @@ Configuration Boot {
             }
             script Clone_rsConfigs {
                 SetScript = {
-                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
-                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/') rsConfigs"
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/')"
                 }
 
                 TestScript = {
-                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
-                    if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs')) 
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $d.mR)) 
                     {return $true}
                     else 
                     {return $false}
                 }
 
                 GetScript = {
-                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     return @{
                         'Result' = (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR)) -PathType Container)
                     }
@@ -230,7 +233,7 @@ Configuration Boot {
                 DependsOn = '[Script]UpdateGitConfig'
             }
             File rsPlatformDir {
-                SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'rsConfigs\rsPlatform'
+                SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPlatform' -join '\')
                 DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
                 Type = 'Directory'
                 Recurse = $true
@@ -240,13 +243,13 @@ Configuration Boot {
             }
             script ClonersPackageSourceManager {
                 SetScript = {
-                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
                     Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
                 }
 
                 TestScript = {
-                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources') 
                     {return $true}
                     else 
@@ -254,7 +257,7 @@ Configuration Boot {
                 }
 
                 GetScript = {
-                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') | ConvertFrom-Json
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     return @{
                         'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources' -PathType Container)
                     }
@@ -412,6 +415,7 @@ Configuration Boot {
   
 Create-BootTask
 Create-Secrets
+$d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM -PullServerIP $PullServerIP
