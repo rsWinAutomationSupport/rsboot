@@ -53,16 +53,13 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
-    param(
-        [String] $PullServerIP
-    )
-    @"
+@"
     [DSCLocalConfigurationManager()]
     Configuration LCM
     {
         Node $env:COMPUTERNAME
         {
-            if( !($PullServerIP) ){
+            if( -not (Test-Path 'C:\Windows\Temp\bootstrapinfo.json') ){
                 Settings
                 {
                     ActionAfterReboot = 'ContinueConfiguration'
@@ -78,19 +75,19 @@ function Set-LCM {
                     AllowModuleOverwrite = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
                     RefreshMode = 'Pull'
-                    ConfigurationID = [Guid]::NewGuid()
+                    ConfigurationID = "$($bootstrapinfo.MyGuid)"
                 }
-
                 ConfigurationRepositoryWeb DSCHTTPS {
                     Name= 'DSCHTTPS'
-                    ServerURL = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)/PSDSCPullServer.svc"
+                    ServerURL = "https://$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc"
                     #CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($bootstrapinfo.Name)").Thumbprint
-                    AllowUnsecureConnection = $False
+                    AllowUnsecureConnection = 0
                 }
             }
         }
     }
-    LCM -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
+    Get-Content 'C:\Windows\Temp\bootstrapinfo.json' | ConvertFrom-Json | Set-Variable bootstrapinfo
+    LCM -OutputPath 'C:\Windows\Temp' -Verbose
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 "@ | Invoke-Expression -Verbose
 }
@@ -356,7 +353,7 @@ Configuration Boot {
             }
             Script GetPullPublicCert {
                 SetScript = {
-                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' | ConvertFrom-Json
                     $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -415,7 +412,6 @@ Configuration Boot {
   
 Create-BootTask
 Create-Secrets
-$d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM -PullServerIP $PullServerIP
