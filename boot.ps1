@@ -10,7 +10,7 @@ $VerbosePreference = 'Continue'
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
     if(!($PullServerIP)){
-        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {Get-Content $(Join-Path $defaultPath 'secrets.json') | ConvertFrom-Json | Set-Variable -Name d -Scope Global}
+        if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global}
         else {
             $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
             foreach($key in $keys){
@@ -25,7 +25,7 @@ function Create-Secrets {
     }
     else{
         if( Test-Path 'C:\Windows\Temp\bootstrapinfo.json' ) {
-            Get-Content 'C:\Windows\Temp\bootstrapinfo.json' | ConvertFrom-Json | Set-Variable -Name bootstrapinfo -Scope Global
+            Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json | Set-Variable -Name bootstrapinfo -Scope Global
         }
         else{
             $bootstrapinfo = @{
@@ -91,7 +91,9 @@ function Set-LCM {
             }
         }
     }
-    Get-Content 'C:\Windows\Temp\bootstrapinfo.json' | ConvertFrom-Json | Set-Variable bootstrapinfo
+    if( Test-Path 'C:\Windows\Temp\bootstrapinfo.json' ) {
+        Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json | Set-Variable -Name bootstrapinfo -Scope Global
+    }
     LCM -OutputPath 'C:\Windows\Temp' -Verbose
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
 "@ | Invoke-Expression -Verbose
@@ -358,7 +360,7 @@ Configuration Boot {
             }
             Script GetPullPublicCert {
                 SetScript = {
-                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json
                     $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -369,7 +371,7 @@ Configuration Boot {
                     $store.Close()
                 }
                 TestScript = {
-                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json') -Raw | ConvertFrom-Json
                     $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -378,7 +380,7 @@ Configuration Boot {
                     else {return $true}
                 }
                 GetScript = {
-                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json') -Raw | ConvertFrom-Json
                     $uri = "https://$($bootstrapinfo.IP):$($bootstrapinfo.Port)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -390,7 +392,7 @@ Configuration Boot {
             }
             Script SendClientPublicCert {
                 SetScript = {
-                    $bootstrapinfo = Get-Content $(Join-Path 'C:\Windows\Temp\' 'bootstrapinfo.json') | ConvertFrom-Json
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json') -Raw | ConvertFrom-Json
                     [Reflection.Assembly]::LoadWithPartialName("System.Messaging") | Out-Null
                     $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
