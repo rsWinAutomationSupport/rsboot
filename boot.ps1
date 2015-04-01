@@ -133,7 +133,7 @@ Configuration Boot {
                     'Result' = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
                 }
             }
-            DependsOn = '[Script]DevOpsDir'
+            DependsOn = @('[Script]DevOpsDir','[Script]GetMakeCert')
         }
         Script InstallWmf5 {
             SetScript = {
