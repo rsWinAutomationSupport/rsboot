@@ -386,6 +386,7 @@ Configuration Boot {
                         'Result' = (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()))
                     }
                 }
+                DependsOn = [Script]'MSMQ'
             }
             Script SendClientPublicCert {
                 SetScript = {
@@ -409,6 +410,7 @@ Configuration Boot {
                         'Result' = $true
                     }
                 }
+                DependsOn = [Script]'MSMQ'
             }                
         }
     } 
