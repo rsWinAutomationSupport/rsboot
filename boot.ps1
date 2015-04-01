@@ -108,7 +108,7 @@ Configuration Boot {
         [String] $PullServerIP
     )
     node $env:COMPUTERNAME {
-        script DevOpsDir {
+        Script DevOpsDir {
             SetScript = {New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory -Verbose}
             TestScript = {
                 if(Test-Path -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')))
@@ -193,7 +193,7 @@ Configuration Boot {
                 ValueType = 'ExpandString'
                 DependsOn = '[Package]InstallGit'
             }  
-            script UpdateGitConfig {
+            Script UpdateGitConfig {
                 SetScript = {
                     Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
                     Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.name $env:COMPUTERNAME"
@@ -213,7 +213,7 @@ Configuration Boot {
                 }
                 DependsOn = '[Registry]SetGitPath'
             }
-            script Clone_rsConfigs {
+            Script Clone_rsConfigs {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
@@ -245,7 +245,7 @@ Configuration Boot {
                 Ensure = 'Present'
                 DependsOn = '[Script]Clone_rsConfigs'
             }
-            script ClonersPackageSourceManager {
+            Script ClonersPackageSourceManager {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
