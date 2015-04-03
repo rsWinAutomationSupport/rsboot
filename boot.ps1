@@ -388,6 +388,23 @@ Configuration Boot {
                 }
                 DependsOn = '[WindowsFeature]MSMQ'
             }
+            Script SetHostFile {
+                SetScript = {
+                    $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json
+                    $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($bootstrapinfo.IP) -AND $_ -notmatch $($bootstrapinfo.Name)})
+                    $hostfile += $( $($bootstrapinfo.IP)+ "`t`t" + $($bootstrapinfo.Name))
+                    Set-Content -Path "C:\Windows\System32\Drivers\etc\hosts" -Value $hostfile -Force
+                }
+                TestScript = {
+                    return $false
+                }
+                GetScript = {
+                    return @{
+                        'Result' = $true
+                    }
+                }
+                DependsOn = '[WindowsFeature]MSMQ'
+            }
             Script SendClientPublicCert {
                 SetScript = {
                     $bootstrapinfo = Get-Content 'C:\Windows\Temp\bootstrapinfo.json' -Raw | ConvertFrom-Json
