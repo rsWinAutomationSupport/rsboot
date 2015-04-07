@@ -2,17 +2,17 @@
     [String] $defaultPath  = 'C:\DevOps',
     [string] $PullServerIP = $null,
     [string] $PullServerName = 'PullServer',
+    [string] $dsc_Config,
+    [string] $shared_key,
     [int] $PullServerPort = 8080,
-    [Hashtable] $secrets
-)
-$VerbosePreference = 'Continue' 
+    [Hashtable] $secrets)
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 foreach( $key in ($PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($PSBoundParameters[$key]) "}
 function Create-Secrets {
     if(!($PullServerIP)){
         if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global}
         else {
-            $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken')
+            $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken','shared_key')
             foreach($key in $keys){
                 if($secrets.keys -notcontains $key){ 
                     Write-Verbose "$key key is missing from secrets parameter"
@@ -32,6 +32,8 @@ function Create-Secrets {
                 'IP' = $PullServerIP
                 'Name' = $PullServerName
                 'Port' = $PullServerPort
+                'dsc_config' = $dsc_Config
+                'shared_key' = $shared_key
                 'MyGuid' = [Guid]::NewGuid().Guid
             }
             Set-Content -Path 'C:\Windows\Temp\bootstrapinfo.json' -Value $($bootstrapinfo | ConvertTo-Json) -Verbose
@@ -412,6 +414,8 @@ Configuration Boot {
                     $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
                         'GUID' = $($bootstrapinfo.MyGuid)
+                        'dsc_config' = $($bootstrapinfo.dsc_config)
+                        'shared_key' = $($bootstrapinfo.shared_key)
                         'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
                     } | ConvertTo-Json
                     $msg = New-Object System.Messaging.Message
