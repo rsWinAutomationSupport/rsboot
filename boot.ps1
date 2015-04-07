@@ -421,7 +421,7 @@ Configuration Boot {
                     $msg = New-Object System.Messaging.Message
                     $msg.Label = 'execute'
                     $msg.Body = $msgbody
-                    $queueName = "FormatName:DIRECT=HTTP://$($bootstrapinfo.IP)/msmq/private$/rsdsc"
+                    $queueName = "FormatName:DIRECT=HTTPS://$($bootstrapinfo.Name)/msmq/private$/rsdsc"
                     $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                     $queue.Send($msg)
                 }
@@ -431,7 +431,7 @@ Configuration Boot {
                         'Result' = $true
                     }
                 }
-                DependsOn = '[WindowsFeature]MSMQ'
+                DependsOn = @('[WindowsFeature]MSMQ','[Script]SetHostFile')
             }                
         }
     } 
