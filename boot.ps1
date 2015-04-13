@@ -458,8 +458,5 @@ if( !($PullServerIP) ){
     Set-Pull
 }
 else {
-  (Invoke-WebRequest -Uri "https:/$PullServerNa:8080/PSDSCPullServer.svc/Action(ConfigurationId='f05a753c-673c-449d-acae-0e3cfc00768d')/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
-  Update-DscConfiguration -Wait -Verbose
-  PS C:\Users\Administrator> (Invoke-WebRequest -Uri "https://WIN-UNCHP0QC0CR:8080/PSDSCPullServer.svc/Action(ConfigurationId='f05a753c-673c-449d-acae-0e3cfc00768d')/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
   Update-DscConfiguration -Wait -Verbose
 }
