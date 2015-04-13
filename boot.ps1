@@ -418,15 +418,15 @@ Configuration Boot {
                         'shared_key' = $($bootstrapinfo.shared_key)
                         'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
                     } | ConvertTo-Json
-                    $msg = New-Object System.Messaging.Message
-                    $msg.Label = 'execute'
-                    $msg.Body = $msgbody
-                    $queueName = "FormatName:DIRECT=HTTPS://$($bootstrapinfo.Name)/msmq/private$/rsdsc"
-                    $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
-                    $queue.Send($msg)
                     $statusCode = 404
                     do {
                       try {
+                        $msg = New-Object System.Messaging.Message
+                        $msg.Label = 'execute'
+                        $msg.Body = $msgbody
+                        $queueName = "FormatName:DIRECT=HTTPS://$($bootstrapinfo.Name)/msmq/private$/rsdsc"
+                        $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
+                        $queue.Send($msg)
                         $statusCode = (Invoke-WebRequest -Uri "https:/$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc/Action(ConfigurationId="$($bootstrapinfo.MyGuid)")/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
                       }
                       catch {
