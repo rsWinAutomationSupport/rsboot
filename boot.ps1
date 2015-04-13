@@ -60,7 +60,7 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
-@"
+  @"
     [DSCLocalConfigurationManager()]
     Configuration LCM
     {
@@ -424,6 +424,17 @@ Configuration Boot {
                     $queueName = "FormatName:DIRECT=HTTPS://$($bootstrapinfo.Name)/msmq/private$/rsdsc"
                     $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                     $queue.Send($msg)
+                    $statusCode = 404
+                    do {
+                      try {
+                        $statusCode = (Invoke-WebRequest -Uri "https:/$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc/Action(ConfigurationId="$($bootstrapinfo.MyGuid)")/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
+                      }
+                      catch {
+                        throw "Error retrieving configuration $($_.Exceptions.message)"
+                      }
+                      Start-Sleep -Seconds 45
+                    }
+                    while($statusCode -ne 200)
                 }
                 TestScript = { Return $false }
                 GetScript = {
@@ -445,4 +456,10 @@ Set-LCM
 if( !($PullServerIP) ){
     Set-rsPlatform
     Set-Pull
+}
+else {
+  (Invoke-WebRequest -Uri "https:/$PullServerNa:8080/PSDSCPullServer.svc/Action(ConfigurationId='f05a753c-673c-449d-acae-0e3cfc00768d')/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
+  Update-DscConfiguration -Wait -Verbose
+  PS C:\Users\Administrator> (Invoke-WebRequest -Uri "https://WIN-UNCHP0QC0CR:8080/PSDSCPullServer.svc/Action(ConfigurationId='f05a753c-673c-449d-acae-0e3cfc00768d')/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
+  Update-DscConfiguration -Wait -Verbose
 }
