@@ -428,11 +428,10 @@ Configuration Boot {
                         $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                         $queue.Send($msg)
                         Start-Sleep -Seconds 90
-                        $statusCode = (Invoke-WebRequest -Uri "https://$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc/Action(ConfigurationId="$($bootstrapinfo.MyGuid)")/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
+                        $statusCode = (Invoke-WebRequest -Uri "https://$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($bootstrapinfo.MyGuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
                       }
                       catch {
                         Write-Verbose "Error retrieving configuration $($_.Exceptions.message)"
-                        #throw "Error retrieving configuration $($_.Exceptions.message)"
                       }
                     }
                     while($statusCode -ne '200')
