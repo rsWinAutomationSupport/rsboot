@@ -431,6 +431,7 @@ Configuration Boot {
                         $statusCode = (Invoke-WebRequest -Uri "https://$($bootstrapinfo.Name):$($bootstrapinfo.Port)/PSDSCPullServer.svc/Action(ConfigurationId="$($bootstrapinfo.MyGuid)")/ConfigurationContent" -ErrorAction SilentlyContinue).statuscode
                       }
                       catch {
+                        Write-Verbose "Error retrieving configuration $($_.Exceptions.message)"
                         #throw "Error retrieving configuration $($_.Exceptions.message)"
                       }
                     }
