@@ -126,20 +126,20 @@ Configuration Boot {
             }
         }
         Script GetWMF5 {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'WindowsBlue-KB3037315-x64.msu'))}
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu')}
 
-            TestScript = {Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')}
+            TestScript = {Test-Path -Path 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu'}
 
             GetScript = {
                 return @{
-                    'Result' = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu')
+                    'Result' = 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu'
                 }
             }
             DependsOn = @('[Script]DevOpsDir','[Script]GetMakeCert')
         }
         Script InstallWmf5 {
             SetScript = {
-                Start-Process -Wait -FilePath $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'WindowsBlue-KB3037315-x64.msu') -ArgumentList '/quiet' -Verbose
+                Start-Process -Wait -FilePath 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu' -ArgumentList '/quiet' -Verbose
                 $global:DSCMachineStatus = 1 
             }
             TestScript = {
@@ -168,20 +168,20 @@ Configuration Boot {
         }
         if(!($PullServerIP)){
             Script GetGit {
-                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe',$(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine'))  'Git-Windows-Latest.exe') )}
+                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe','C:\Windows\Temp\Git-Windows-Latest.exe' )}
 
-                TestScript = {if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')) {return $true} else {return $false}}
+                TestScript = {if(Test-Path -Path 'C:\Windows\Temp\Git-Windows-Latest.exe') {return $true} else {return $false}}
 
                 GetScript = {
                     return @{
-                        'Result' = $(Test-Path  -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe'))
+                        'Result' = 'C:\Windows\Temp\Git-Windows-Latest.exe'
                     }
                 }
                 DependsOn = '[Script]Installwmf5'
             }
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
-                Path = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'Git-Windows-Latest.exe')
+                Path = 'C:\Windows\Temp\Git-Windows-Latest.exe'
                 ProductId = ''
                 Arguments = '/verysilent'
                 Ensure = 'Present'
