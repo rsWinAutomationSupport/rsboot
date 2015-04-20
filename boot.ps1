@@ -276,10 +276,10 @@ Configuration Boot {
                     Get-ChildItem -Path Cert:\LocalMachine\My\ |
                     Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                     Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath', 'Machine'))  'pullserver.crt'), -sr localmachine, -len 2048
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my, -sr localmachine, -len 2048
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}) -and (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt'))) 
+                    if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} ) 
                     {return $true}
                     else 
                     {return $false}
@@ -294,7 +294,6 @@ Configuration Boot {
             WindowsFeature IIS {
                 Ensure = 'Present'
                 Name = 'Web-Server'
-                DependsOn = '[File]PublicPullServerCert'
             }
             WindowsFeature DSCServiceFeature {
                 Ensure = 'Present'
@@ -306,7 +305,11 @@ Configuration Boot {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
                     Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                     Remove-Item
-                    & certutil.exe -addstore -f Root $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
+                    $publicCert = [System.Convert]::ToBase64String((Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)
+                    $store = Get-Item Cert:\LocalMachine\Root
+                    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]"ReadWrite")
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,[System.Convert]::fromBase64String($publicCert))) )
+                    $store.Close()
                 }
                 TestScript = {
                     if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
@@ -319,15 +322,6 @@ Configuration Boot {
                         'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
                     }
                 }
-                DependsOn = '[Script]CreateServerCertificate'
-            }
-            File PublicPullServerCert {
-                Ensure = 'Present'
-                SourcePath = $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'pullserver.crt')
-                DestinationPath = 'C:\inetpub\wwwroot'
-                MatchSource = $true
-                Type = 'File'
-                Checksum = 'SHA-256'
                 DependsOn = '[Script]CreateServerCertificate'
             }
         }
@@ -446,7 +440,7 @@ Configuration Boot {
         }
     } 
 }
-  
+
 Create-BootTask
 Create-Secrets
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
