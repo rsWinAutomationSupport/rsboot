@@ -82,6 +82,7 @@ function Set-LCM {
                     AllowModuleOverwrite = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
                     RefreshMode = 'Pull'
+                    RebootNodeIfNeeded = 1
                     ConfigurationID = "$($bootstrapinfo.MyGuid)"
                 }
                 ConfigurationRepositoryWeb DSCHTTPS {
