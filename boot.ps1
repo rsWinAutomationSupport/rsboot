@@ -135,6 +135,7 @@ Configuration Boot {
         Script InstallWmf5 {
             SetScript = {
                 Start-Process -Wait -FilePath 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu' -ArgumentList '/quiet' -Verbose
+                Start-Sleep -Seconds 30
                 $global:DSCMachineStatus = 1 
             }
             TestScript = {
