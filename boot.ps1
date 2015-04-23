@@ -38,7 +38,7 @@ function Create-BootTask {
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn rsBoot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""}
 }
 function Set-rsPlatform {
-@'
+  @'
     Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
@@ -54,7 +54,7 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
-@"
+  @"
     [DSCLocalConfigurationManager()]
     Configuration LCM
     {
@@ -403,17 +403,27 @@ Configuration Boot {
                 Ensure = 'Present'
             }
             Script GetPullPublicCert {
-                SetScript = {
-                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
-                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
-                    $webRequest = [Net.WebRequest]::Create($uri)
-                    try { $webRequest.GetResponse() } catch {}
-                    $cert = $webRequest.ServicePoint.Certificate
-                    $store = Get-Item Cert:\LocalMachine\Root
-                    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-                    $store.Close()
+              SetScript = {
+              do {
+                try {
+                  $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
+                  Start-Sleep -Seconds 15
                 }
+                catch {
+                  Write-Verbose "Error retrieving configuration $($_.Exceptions.message)"
+                }
+              }
+              while($statusCode -ne 200)
+                $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                $webRequest = [Net.WebRequest]::Create($uri)
+                try { $webRequest.GetResponse() } catch {}
+                $cert = $webRequest.ServicePoint.Certificate
+                $store = Get-Item Cert:\LocalMachine\Root
+                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
+                $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+                $store.Close()
+                  }
                 TestScript = {
                     $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
