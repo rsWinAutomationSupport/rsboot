@@ -162,7 +162,7 @@ Configuration Boot {
                 }
             }
         }
-        script DSCBootTask {
+        Script DSCBootTask {
 
             GetScript = {
                 $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' -ErrorAction SilentlyContinue
@@ -192,7 +192,7 @@ Configuration Boot {
                 }
             }
         }
-        script DSCConsistencyTask {
+        Script DSCConsistencyTask {
 
             GetScript = {
                 $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
@@ -403,30 +403,45 @@ Configuration Boot {
                 Ensure = 'Present'
             }
             Script GetPullPublicCert {
-              SetScript = {
-              do {
-                try {
-                  $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
-                  Start-Sleep -Seconds 15
+                SetScript = {
+                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    do {
+                        $rerun = $true
+                        try {
+                            Invoke-WebRequest -Uri $uri -ErrorAction SilentlyContinue -UseBasicParsing
+                        }
+                        catch {
+                            Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
+                            if($($_.Exception.message) -like '*SSL/TLS*') { $rerun = $false }
+                            else { Start-Sleep -Seconds 10 }
+                        }
+                    }
+                    while($rerun)
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    Write-Verbose "Adding PullServer Root Certificate to Cert:\LocalMachine\Root"
+                    $store = Get-Item Cert:\LocalMachine\Root
+                    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
+                    $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+                    $store.Close()
                 }
-                catch {
-                  Write-Verbose "Error retrieving configuration $($_.Exceptions.message)"
-                }
-              }
-              while($statusCode -ne 200)
-                $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
-                $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
-                $webRequest = [Net.WebRequest]::Create($uri)
-                try { $webRequest.GetResponse() } catch {}
-                $cert = $webRequest.ServicePoint.Certificate
-                $store = Get-Item Cert:\LocalMachine\Root
-                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-                $store.Close()
-                  }
                 TestScript = {
                     $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    do {
+                        $rerun = $true
+                        try {
+                            Invoke-WebRequest -Uri $uri -ErrorAction SilentlyContinue -UseBasicParsing
+                        }
+                        catch {
+                            Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
+                            if($($_.Exception.message) -like '*SSL/TLS*') { $rerun = $false }
+                            else{ Start-Sleep -Seconds 10 }
+                        }
+                    }
+                    while($rerun)
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
                     $cert = $webRequest.ServicePoint.Certificate
