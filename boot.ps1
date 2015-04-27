@@ -429,7 +429,7 @@ Configuration Boot {
                     $store.Close()
                 }
                 TestScript = {
-                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
                     do {
                         $rerun = $true
@@ -450,7 +450,7 @@ Configuration Boot {
                     else {return $true}
                 }
                 GetScript = {
-                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -463,7 +463,7 @@ Configuration Boot {
             }
             Script SetHostFile {
                 SetScript = {
-                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
                     $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
                     Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
@@ -480,7 +480,7 @@ Configuration Boot {
             }
             Script SendClientPublicCert {
                 SetScript = {
-                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
                     $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
