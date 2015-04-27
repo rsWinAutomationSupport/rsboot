@@ -7,13 +7,14 @@
     [int] $PullServerPort = 8080,
     [Hashtable] $secrets)
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
+[Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
 $global:PSBoundParameters = $PSBoundParameters
 function Create-Secrets {
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
-        Set-Content -Path 'C:\Windows\Temp\nodeinfo.json' -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
+        Set-Content -Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
         $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken','shared_key')
@@ -26,8 +27,8 @@ function Create-Secrets {
             Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
         }
     }
-    if( Test-Path 'C:\Windows\Temp\nodeinfo.json' ) {
-        Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
+    if( Test-Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') ) {
+        Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
     }
     if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
@@ -60,7 +61,7 @@ function Set-LCM {
     {
         Node $env:COMPUTERNAME
         {
-            if( Test-Path 'C:\Windows\Temp\nodeinfo.json' ){
+            if( Test-Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') ){
                 Settings {
                     AllowModuleOverwrite = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
@@ -88,8 +89,8 @@ function Set-LCM {
             }
         }
     }
-    if( Test-Path 'C:\Windows\Temp\nodeinfo.json' ) {
-        Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
+    if( Test-Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') ) {
+        Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
     }
     LCM -OutputPath 'C:\Windows\Temp' -Verbose
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
@@ -404,7 +405,7 @@ Configuration Boot {
             }
             Script GetPullPublicCert {
                 SetScript = {
-                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
                     do {
                         $rerun = $true
@@ -428,7 +429,7 @@ Configuration Boot {
                     $store.Close()
                 }
                 TestScript = {
-                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
                     do {
                         $rerun = $true
@@ -449,7 +450,7 @@ Configuration Boot {
                     else {return $true}
                 }
                 GetScript = {
-                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
@@ -462,7 +463,7 @@ Configuration Boot {
             }
             Script SetHostFile {
                 SetScript = {
-                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
                     $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
                     $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
                     Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
@@ -479,7 +480,7 @@ Configuration Boot {
             }
             Script SendClientPublicCert {
                 SetScript = {
-                    $nodeinfo = Get-Content 'C:\Windows\Temp\nodeinfo.json' -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
                     [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
                     $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
