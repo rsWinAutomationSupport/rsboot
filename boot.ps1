@@ -39,7 +39,7 @@ function Create-BootTask {
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn rsBoot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""}
 }
 function Set-rsPlatform {
-  @'
+@'
     Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
@@ -55,7 +55,7 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
-  @"
+@"
     [DSCLocalConfigurationManager()]
     Configuration LCM
     {
@@ -164,7 +164,6 @@ Configuration Boot {
             }
         }
         Script DSCBootTask {
-
             GetScript = {
                 $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' -ErrorAction SilentlyContinue
                 if(!($result)) {
@@ -249,10 +248,16 @@ Configuration Boot {
                 Ensure = 'Present'
                 Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
                 ValueName = 'Path'
-                ValueData = $( ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' )
                 ValueType = 'ExpandString'
-                DependsOn = '[Package]InstallGit'
-            }  
+                ValueData = $(
+                    if( (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path -like "*${env:ProgramFiles(x86)}\Git\bin\*" ){
+                        (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path
+                    }
+                    else{
+                        ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' 
+                    }
+                )
+            } 
             Script UpdateGitConfig {
                 SetScript = {
                     Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
