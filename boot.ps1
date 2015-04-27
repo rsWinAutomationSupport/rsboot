@@ -28,7 +28,7 @@ function Create-Secrets {
         }
     }
     if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
-        Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
+        Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
     }
     if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
@@ -61,7 +61,7 @@ function Set-LCM {
     {
         Node $env:COMPUTERNAME
         {
-            if( Test-Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') ){
+            if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ){
                 Settings {
                     AllowModuleOverwrite = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
@@ -89,8 +89,8 @@ function Set-LCM {
             }
         }
     }
-    if( Test-Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') ) {
-        Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
+    if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
+        Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
     }
     LCM -OutputPath 'C:\Windows\Temp' -Verbose
     Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
@@ -405,7 +405,7 @@ Configuration Boot {
             }
             Script GetPullPublicCert {
                 SetScript = {
-                    $nodeinfo = Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
                     do {
                         $rerun = $true
