@@ -27,7 +27,7 @@ function Create-Secrets {
             Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
         }
     }
-    if( Test-Path [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') ) {
+    if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
         Get-Content [Environment]::GetEnvironmentVariable('nodeInfoPath','Machine') -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
     }
     if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {
