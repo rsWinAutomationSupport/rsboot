@@ -117,20 +117,10 @@ Configuration Boot {
         [String] $PullServerIP
     )
     node $env:COMPUTERNAME {
-        Script DevOpsDir {
-            SetScript = {New-Item -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -ItemType Directory -Verbose}
-            TestScript = {
-                if(Test-Path -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')))
-                {return $true}
-                else 
-                {return $false}
-            }
-
-            GetScript = {
-                return @{
-                    'Result' = (Test-Path -Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -PathType Container)
-                }
-            }
+        File DevOpsDir{
+            DestinationPath = [Environment]::GetEnvironmentVariable('defaultPath','Machine')
+            Ensure = 'Present'
+            Type = 'Directory'
         }
         Script GetMakeCert {
             SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
@@ -153,7 +143,7 @@ Configuration Boot {
                     'Result' = 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu'
                 }
             }
-            DependsOn = @('[Script]DevOpsDir','[Script]GetMakeCert')
+            DependsOn = @('[File]DevOpsDir','[Script]GetMakeCert')
         }
         Script InstallWmf5 {
             SetScript = {
