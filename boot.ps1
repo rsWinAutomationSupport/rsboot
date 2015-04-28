@@ -97,9 +97,8 @@ function Set-LCM {
 "@ | Invoke-Expression -Verbose
 }
 function Set-Pull {
-    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
     try{
-        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
+        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
     }
     catch {
         Write-Verbose "Error in rsPullServer $($_.Exception.message)"
@@ -509,7 +508,7 @@ Configuration Boot {
                             $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
                         }
                         catch {
-                            Write-Verbose "Error retrieving configuration $($_.Exceptions.message)"
+                            Write-Verbose "Error retrieving configuration $($_.Exception.message)"
                         }
                     }
                     while($statusCode -ne 200)
