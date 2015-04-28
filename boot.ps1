@@ -47,18 +47,18 @@ function Create-BootTask {
 }
 function Set-rsPlatform {
 @'
-        Configuration initDSC {
+    Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
         {
-        rsPlatform Modules
-        {
-        Ensure = 'Present'
+            rsPlatform Modules
+            {
+                Ensure = 'Present'
+            }
         }
-        }
-        }
-        initDSC -OutputPath 'C:\Windows\Temp' -Verbose
-        Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+    }
+    initDSC -OutputPath 'C:\Windows\Temp' -Verbose
+    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
