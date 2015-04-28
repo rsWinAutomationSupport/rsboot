@@ -125,6 +125,17 @@ Configuration Boot {
                 }
             }
         }
+        Script GetMakeCert {
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
+
+            TestScript = {Test-Path -Path 'C:\Windows\system32\makecert.exe'}
+
+            GetScript = {
+                return @{
+                    'Result' = $(Test-Path  -Path 'C:\Windows\system32\makecert.exe')
+                }
+            }
+        }
         Script GetWMF5 {
             SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu')}
 
@@ -154,18 +165,7 @@ Configuration Boot {
                     'Result' = $PSVersionTable.PSVersion.Major
                 }
             }
-            DependsOn = @('[Script]GetWMF5', '[Script]DevOpsDir')
-        }
-        Script GetMakeCert {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
-
-            TestScript = {Test-Path -Path 'C:\Windows\system32\makecert.exe'}
-
-            GetScript = {
-                return @{
-                    'Result' = $(Test-Path  -Path 'C:\Windows\system32\makecert.exe')
-                }
-            }
+            DependsOn = '[Script]GetWMF5'
         }
         Script DSCBootTask {
             GetScript = {
@@ -414,7 +414,6 @@ Configuration Boot {
                     }
                 }
             }
-            
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
