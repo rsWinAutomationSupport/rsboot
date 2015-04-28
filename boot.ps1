@@ -417,7 +417,7 @@ Configuration Boot {
                         return $true
                     }
                     else {
-                        schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Update-DscConfiguration'"
+                        schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Invoke-CimMethod -Namespace root/Microsoft/Windows/DesiredStateConfiguration –ClassName MSFT_DSCLocalConfigurationManager -MethodName PerformRequiredConfigurationChecks -Arg @{Flags = [System.UInt32]2 }'"
                     }
                 }
             }
