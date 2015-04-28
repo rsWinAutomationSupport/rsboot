@@ -36,7 +36,14 @@ function Create-Secrets {
 }
 function Create-BootTask {
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
-    if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {Start-Process -Wait schtasks.exe -ArgumentList "/create /sc Onstart /tn rsBoot /ru System /tr ""PowerShell.exe -ExecutionPolicy Bypass -file $PSCommandPath $arguments"""}
+    if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
+        $A = New-ScheduledTaskAction –Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -file $PSCommandPath $arguments"
+        $T = New-ScheduledTaskTrigger -AtStartup
+        $P = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
+        $S = New-ScheduledTaskSettingsSet
+        $D = New-ScheduledTask -Action $A -Principal $P -Trigger $T -Settings $S
+        Register-ScheduledTask rsBoot -InputObject $D
+    }
 }
 function Set-rsPlatform {
 @'
