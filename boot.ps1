@@ -234,25 +234,12 @@ Configuration Boot {
                 }
 
             }
-            Script GetGit {
-                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe','C:\Windows\Temp\Git-Windows-Latest.exe' )}
-
-                TestScript = {if(Test-Path -Path 'C:\Windows\Temp\Git-Windows-Latest.exe') {return $true} else {return $false}}
-
-                GetScript = {
-                    return @{
-                        'Result' = 'C:\Windows\Temp\Git-Windows-Latest.exe'
-                    }
-                }
-                DependsOn = '[Script]Installwmf5'
-            }
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
-                Path = 'C:\Windows\Temp\Git-Windows-Latest.exe'
+                Path = 'http://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe'
                 ProductId = ''
                 Arguments = '/verysilent'
                 Ensure = 'Present'
-                DependsOn = '[Script]GetGit'
             }
             Registry SetGitPath {       
                 Ensure = 'Present'
