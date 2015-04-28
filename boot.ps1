@@ -413,6 +413,7 @@ Configuration Boot {
                 schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Update-DscConfiguration'"
               }
             }
+            }
             
             Script CreateEncryptionCertificate {
               SetScript = {
