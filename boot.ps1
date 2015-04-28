@@ -5,7 +5,7 @@
     [string] $dsc_Config,
     [string] $shared_key,
     [int] $PullServerPort = 8080,
-    [Hashtable] $secrets)
+[Hashtable] $secrets)
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 [Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
 $global:PSBoundParameters = $PSBoundParameters
@@ -40,18 +40,18 @@ function Create-BootTask {
 }
 function Set-rsPlatform {
 @'
-    Configuration initDSC {
+        Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
         {
-            rsPlatform Modules
-            {
-                Ensure = 'Present'
-            }
+        rsPlatform Modules
+        {
+        Ensure = 'Present'
         }
-    }
-    initDSC -OutputPath 'C:\Windows\Temp' -Verbose
-    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+        }
+        }
+        initDSC -OutputPath 'C:\Windows\Temp' -Verbose
+        Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
 function Set-LCM {
@@ -197,334 +197,334 @@ Configuration Boot {
             }
         }
         if(!($PullServerIP)){
-          Script DSCConsistencyTask {
-            GetScript = {
-              $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-              if(!($result)) {
-                $result = 'No Consistency Task'
-              }
-              return @{
-                'Result' = $result
-              }
-            }
-            TestScript = {
-              $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-              if($test) {
-                return $true
-              }
-              else {
-                return $false
-              }
-            }
-            SetScript = {
-              $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-              if($test) {
-                return $true
-              }
-              else {
-                schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Start-DscConfiguration -UseExisting -Force'"
-              }
-            }
+            Script DSCConsistencyTask {
+                GetScript = {
+                    $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
+                    if(!($result)) {
+                        $result = 'No Consistency Task'
+                    }
+                    return @{
+                        'Result' = $result
+                    }
+                }
+                TestScript = {
+                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
+                    if($test) {
+                        return $true
+                    }
+                    else {
+                        return $false
+                    }
+                }
+                SetScript = {
+                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
+                    if($test) {
+                        return $true
+                    }
+                    else {
+                        schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Start-DscConfiguration -UseExisting -Force'"
+                    }
+                }
 
-          }
-          Script GetGit {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe','C:\Windows\Temp\Git-Windows-Latest.exe' )}
+            }
+            Script GetGit {
+                SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('https://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe','C:\Windows\Temp\Git-Windows-Latest.exe' )}
 
-            TestScript = {if(Test-Path -Path 'C:\Windows\Temp\Git-Windows-Latest.exe') {return $true} else {return $false}}
+                TestScript = {if(Test-Path -Path 'C:\Windows\Temp\Git-Windows-Latest.exe') {return $true} else {return $false}}
 
-            GetScript = {
-              return @{
-                'Result' = 'C:\Windows\Temp\Git-Windows-Latest.exe'
-              }
+                GetScript = {
+                    return @{
+                        'Result' = 'C:\Windows\Temp\Git-Windows-Latest.exe'
+                    }
+                }
+                DependsOn = '[Script]Installwmf5'
             }
-            DependsOn = '[Script]Installwmf5'
-          }
-          Package InstallGit {
-            Name = 'Git version 1.9.5-preview20150319'
-            Path = 'C:\Windows\Temp\Git-Windows-Latest.exe'
-            ProductId = ''
-            Arguments = '/verysilent'
-            Ensure = 'Present'
-            DependsOn = '[Script]GetGit'
-          }
-          Registry SetGitPath {       
-            Ensure = 'Present'
-            Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
-            ValueName = 'Path'
-            ValueType = 'ExpandString'
-            ValueData = $(
-              if( (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path -like "*${env:ProgramFiles(x86)}\Git\bin\*" ){
-                (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path
-              }
-              else{
-                ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' 
-              }
-            )
-          } 
-          Script UpdateGitConfig {
-            SetScript = {
-              Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
-              Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.name $env:COMPUTERNAME"
+            Package InstallGit {
+                Name = 'Git version 1.9.5-preview20150319'
+                Path = 'C:\Windows\Temp\Git-Windows-Latest.exe'
+                ProductId = ''
+                Arguments = '/verysilent'
+                Ensure = 'Present'
+                DependsOn = '[Script]GetGit'
             }
-            TestScript = {
-              if( (Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -match $env:COMPUTERNAME )
-              { return $true }
-              else
-              { return $false }
+            Registry SetGitPath {       
+                Ensure = 'Present'
+                Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
+                ValueName = 'Path'
+                ValueType = 'ExpandString'
+                ValueData = $(
+                    if( (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path -like "*${env:ProgramFiles(x86)}\Git\bin\*" ){
+                        (Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path
+                    }
+                    else{
+                        ((Get-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment' -Name Path).Path), "${env:ProgramFiles(x86)}\Git\bin\" -join ';' 
+                    }
+                )
+            } 
+            Script UpdateGitConfig {
+                SetScript = {
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.name $env:COMPUTERNAME"
+                }
+                TestScript = {
+                    if( (Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -match $env:COMPUTERNAME )
+                    { return $true }
+                    else
+                    { return $false }
+                }
+                GetScript = {
+                    return @{
+                        'Result' = $((Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -contains $env:COMPUTERNAME)
+                    }
+                }
+                DependsOn = '[Registry]SetGitPath'
             }
-            GetScript = {
-              return @{
-                'Result' = $((Get-Content 'C:\Program Files (x86)\Git\etc\gitconfig') -contains $env:COMPUTERNAME)
-              }
+            Script Clone_rsConfigs {
+                SetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/')"
+                }
+                TestScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $d.mR)) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    return @{
+                        'Result' = (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR)) -PathType Container)
+                    }
+                }
+                DependsOn = '[Script]UpdateGitConfig'
             }
-            DependsOn = '[Registry]SetGitPath'
-          }
-          Script Clone_rsConfigs {
-            SetScript = {
-              $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-              Set-Location ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) -Verbose
-              Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.branch_rsConfigs) $((('https://', $($d.git_Oauthtoken), '@github.com' -join ''), $($d.git_username), $($d.mR , '.git' -join '')) -join '/')"
+            File rsPlatformDir {
+                SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPlatform' -join '\')
+                DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
+                Type = 'Directory'
+                Recurse = $true
+                MatchSource = $true
+                Ensure = 'Present'
+                DependsOn = '[Script]Clone_rsConfigs'
             }
-            TestScript = {
-              $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-              if(Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $d.mR)) 
-              {return $true}
-              else 
-              {return $false}
+            Script ClonersPackageSourceManager {
+                SetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
+                    Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
+                }
+                TestScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources') 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    return @{
+                        'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources' -PathType Container)
+                    }
+                }
+                DependsOn = '[File]rsPlatformDir'
             }
-            GetScript = {
-              $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-              return @{
-                'Result' = (Test-Path -Path $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR)) -PathType Container)
-              }
+            Script CreateServerCertificate {
+                SetScript = {
+                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my, -sr localmachine, -len 2048
+                }
+                TestScript = {
+                    if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} ) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]GetMakeCert'
             }
-            DependsOn = '[Script]UpdateGitConfig'
-          }
-          File rsPlatformDir {
-            SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPlatform' -join '\')
-            DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
-            Type = 'Directory'
-            Recurse = $true
-            MatchSource = $true
-            Ensure = 'Present'
-            DependsOn = '[Script]Clone_rsConfigs'
-          }
-          Script ClonersPackageSourceManager {
-            SetScript = {
-              $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-              Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
-              Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "clone --branch $($d.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
+            WindowsFeature IIS {
+                Ensure = 'Present'
+                Name = 'Web-Server'
             }
-            TestScript = {
-              $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-              if(Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources') 
-              {return $true}
-              else 
-              {return $false}
+            WindowsFeature DSCServiceFeature {
+                Ensure = 'Present'
+                Name = 'DSC-Service'
+                DependsOn = '[WindowsFeature]IIS'
             }
-            GetScript = {
-              $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-              return @{
-                'Result' = (Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\rsPackageSourceManager\DSCResources' -PathType Container)
-              }
+            Script InstallRootCertificate {
+                SetScript = {
+                    Get-ChildItem -Path Cert:\LocalMachine\Root\ |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Remove-Item
+                    $store = Get-Item Cert:\LocalMachine\Root
+                    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
+                    $store.Close()
+                }
+                TestScript = {
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]CreateServerCertificate'
             }
-            DependsOn = '[File]rsPlatformDir'
-          }
-          Script CreateServerCertificate {
-            SetScript = {
-              $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
-              Get-ChildItem -Path Cert:\LocalMachine\My\ |
-              Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-              Remove-Item
-              & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my, -sr localmachine, -len 2048
-            }
-            TestScript = {
-              if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} ) 
-              {return $true}
-              else 
-              {return $false}
-            }
-            GetScript = {
-              return @{
-                'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
-              }
-            }
-            DependsOn = '[Script]GetMakeCert'
-          }
-          WindowsFeature IIS {
-            Ensure = 'Present'
-            Name = 'Web-Server'
-          }
-          WindowsFeature DSCServiceFeature {
-            Ensure = 'Present'
-            Name = 'DSC-Service'
-            DependsOn = '[WindowsFeature]IIS'
-          }
-          Script InstallRootCertificate {
-            SetScript = {
-              Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-              Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
-              Remove-Item
-              $store = Get-Item Cert:\LocalMachine\Root
-              $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-              $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
-              $store.Close()
-            }
-            TestScript = {
-              if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
-              {return $true}
-              else 
-              {return $false}
-            }
-            GetScript = {
-              return @{
-                'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
-              }
-            }
-            DependsOn = '[Script]CreateServerCertificate'
-          }
         }
         else{
-          Script DSCConsistencyTask {
-            GetScript = {
-              $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-              if(!($result)) {
-                $result = 'No Consistency Task'
-              }
-              return @{
-                'Result' = $result
-              }
-            }
-            TestScript = {
-              $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-              if($test) {
-                return $true
-              }
-              else {
-                return $false
-              }
-            }
-            SetScript = {
-              $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-              if($test) {
-                return $true
-              }
-              else {
-                schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Update-DscConfiguration'"
-              }
-            }
+            Script DSCConsistencyTask {
+                GetScript = {
+                    $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
+                    if(!($result)) {
+                        $result = 'No Consistency Task'
+                    }
+                    return @{
+                        'Result' = $result
+                    }
+                }
+                TestScript = {
+                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
+                    if($test) {
+                        return $true
+                    }
+                    else {
+                        return $false
+                    }
+                }
+                SetScript = {
+                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
+                    if($test) {
+                        return $true
+                    }
+                    else {
+                        schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Update-DscConfiguration'"
+                    }
+                }
             }
             
             Script CreateEncryptionCertificate {
-              SetScript = {
-                $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
-                $cN = 'CN=' + $env:COMPUTERNAME + '_enc'
-                Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
-                & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss root, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
-              }
-              TestScript = {
-                if( (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
-                {return $true}
-                else 
-                {return $false}
-              }
-              GetScript = {
-                return @{
-                  'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
-                  ).Thumbprint
+                SetScript = {
+                    $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
+                    $cN = 'CN=' + $env:COMPUTERNAME + '_enc'
+                    Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
+                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss root, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
                 }
-              }
-              DependsOn = '[Script]GetMakeCert'
+                TestScript = {
+                    if( (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
+                    {return $true}
+                    else 
+                    {return $false}
+                }
+                GetScript = {
+                    return @{
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
+                        ).Thumbprint
+                    }
+                }
+                DependsOn = '[Script]GetMakeCert'
             }
             WindowsFeature MSMQ {
-              Name = 'MSMQ'
-              Ensure = 'Present'
+                Name = 'MSMQ'
+                Ensure = 'Present'
             }
             Script GetPullPublicCert {
-              SetScript = {
-                $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
-                do {
-                  $rerun = $true
-                  try {
-                    Invoke-WebRequest -Uri $uri -ErrorAction SilentlyContinue -UseBasicParsing
-                  }
-                  catch {
-                    Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
-                    if($($_.Exception.message) -like '*SSL/TLS*') { $rerun = $false }
-                    else { Start-Sleep -Seconds 10 }
-                  }
+                SetScript = {
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
+                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    do {
+                        $rerun = $true
+                        try {
+                            Invoke-WebRequest -Uri $uri -ErrorAction SilentlyContinue -UseBasicParsing
+                        }
+                        catch {
+                            Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
+                            if($($_.Exception.message) -like '*SSL/TLS*') { $rerun = $false }
+                            else { Start-Sleep -Seconds 10 }
+                        }
+                    }
+                    while($rerun)
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    Write-Verbose "Adding PullServer Root Certificate to Cert:\LocalMachine\Root"
+                    $store = Get-Item Cert:\LocalMachine\Root
+                    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
+                    $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+                    $store.Close()
                 }
-                while($rerun)
-                $webRequest = [Net.WebRequest]::Create($uri)
-                try { $webRequest.GetResponse() } catch {}
-                $cert = $webRequest.ServicePoint.Certificate
-                Write-Verbose "Adding PullServer Root Certificate to Cert:\LocalMachine\Root"
-                $store = Get-Item Cert:\LocalMachine\Root
-                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-                $store.Close()
-              }
-              TestScript = {
-                $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
-                do {
-                  $rerun = $true
-                  try {
-                    Invoke-WebRequest -Uri $uri -ErrorAction SilentlyContinue -UseBasicParsing
-                  }
-                  catch {
-                    Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
-                    if($($_.Exception.message) -like '*SSL/TLS*') { $rerun = $false }
-                    else{ Start-Sleep -Seconds 10 }
-                  }
+                TestScript = {
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
+                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    do {
+                        $rerun = $true
+                        try {
+                            Invoke-WebRequest -Uri $uri -ErrorAction SilentlyContinue -UseBasicParsing
+                        }
+                        catch {
+                            Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
+                            if($($_.Exception.message) -like '*SSL/TLS*') { $rerun = $false }
+                            else{ Start-Sleep -Seconds 10 }
+                        }
+                    }
+                    while($rerun)
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    if( (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()) ).count -eq 0 ){return $false}
+                    else {return $true}
                 }
-                while($rerun)
-                $webRequest = [Net.WebRequest]::Create($uri)
-                try { $webRequest.GetResponse() } catch {}
-                $cert = $webRequest.ServicePoint.Certificate
-                if( (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()) ).count -eq 0 ){return $false}
-                else {return $true}
-              }
-              GetScript = {
-                $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
-                $webRequest = [Net.WebRequest]::Create($uri)
-                try { $webRequest.GetResponse() } catch {}
-                $cert = $webRequest.ServicePoint.Certificate
-                return @{
-                  'Result' = (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()))
+                GetScript = {
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
+                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    $webRequest = [Net.WebRequest]::Create($uri)
+                    try { $webRequest.GetResponse() } catch {}
+                    $cert = $webRequest.ServicePoint.Certificate
+                    return @{
+                        'Result' = (Get-ChildItem Cert:\LocalMachine\Root | ? Thumbprint -eq ($cert.GetCertHashString()))
+                    }
                 }
-              }
-              DependsOn = '[WindowsFeature]MSMQ'
+                DependsOn = '[WindowsFeature]MSMQ'
             }
             Script SetHostFile {
-              SetScript = {
-                $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
-                $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
-                Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
-              }
-              TestScript = {
-                return $false
-              }
-              GetScript = {
-                return @{
-                  'Result' = $true
+                SetScript = {
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
+                    $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
+                    $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
+                    Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
                 }
-              }
-              DependsOn = '[WindowsFeature]MSMQ'
+                TestScript = {
+                    return $false
+                }
+                GetScript = {
+                    return @{
+                        'Result' = $true
+                    }
+                }
+                DependsOn = '[WindowsFeature]MSMQ'
             }
             Script SendClientPublicCert {
-              SetScript = {
-                $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
-                $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
-                $msgbody = @{'Name' = "$env:COMPUTERNAME"
-                  'uuid' = $($nodeinfo.uuid)
-                  'dsc_config' = $($nodeinfo.dsc_config)
-                  'shared_key' = $($nodeinfo.shared_key)
-                  'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
+                SetScript = {
+                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
+                    [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
+                    $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
+                    $msgbody = @{'Name' = "$env:COMPUTERNAME"
+                        'uuid' = $($nodeinfo.uuid)
+                        'dsc_config' = $($nodeinfo.dsc_config)
+                        'shared_key' = $($nodeinfo.shared_key)
+                        'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
                     } | ConvertTo-Json
                     do {
                         try {
