@@ -98,7 +98,12 @@ function Set-LCM {
 }
 function Set-Pull {
     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
-    Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
+    try{
+        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
+    }
+    catch {
+        Write-Verbose "Error in rsPullServer $($_.Exception.message)"
+    }
 }
 
 Configuration Boot {
@@ -193,7 +198,6 @@ Configuration Boot {
             }
         }
         Script DSCConsistencyTask {
-
             GetScript = {
                 $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
                 if(!($result)) {
@@ -362,10 +366,9 @@ Configuration Boot {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
                     Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                     Remove-Item
-                    $publicCert = [System.Convert]::ToBase64String((Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)
                     $store = Get-Item Cert:\LocalMachine\Root
                     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,[System.Convert]::fromBase64String($publicCert))) )
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
                     $store.Close()
                 }
                 TestScript = {
