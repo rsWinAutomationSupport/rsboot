@@ -63,6 +63,7 @@ function Set-rsPlatform {
 }
 
 Function Set-PullLCM {
+@'
   [DSCLocalConfigurationManager()]
   Configuration PullLCM {
     Settings
@@ -74,13 +75,14 @@ Function Set-PullLCM {
       ConfigurationModeFrequencyMins = 30
       AllowModuleOverwrite = 1
     }
-  
   }
-  LCM -OutputPath 'C:\Windows\Temp' -Verbose
+  PullLCM -OutputPath 'C:\Windows\Temp' -Verbose
   Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+'@ | Invoke-Expression -Verbose
 }
 
 Function Set-ClientLCM {
+@'
   [DSCLocalConfigurationManager()]
   Configuration ClientLCM {
     Settings {
@@ -100,8 +102,9 @@ Function Set-ClientLCM {
   if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
     Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
   }
-  LCM -OutputPath 'C:\Windows\Temp' -Verbose
+  ClientLCM -OutputPath 'C:\Windows\Temp' -Verbose
   Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+'@ | Invoke-Expression -Verbose
 }
 
 function Set-Pull {
