@@ -134,7 +134,7 @@ Configuration Boot {
             }
         }
         Script GetWMF5 {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/4/9/6/496E0D89-F3B0-4FB0-B110-5F135C30325F/WindowsBlue-KB3055381-x64.msu', 'WindowsBlue-KB3055381-x64.msu')}
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/4/9/6/496E0D89-F3B0-4FB0-B110-5F135C30325F/WindowsBlue-KB3055381-x64.msu', 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu')}
 
             TestScript = {Test-Path -Path 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu'}
 
