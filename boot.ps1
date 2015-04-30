@@ -164,7 +164,7 @@ Configuration Boot {
             }
             DependsOn = '[Script]GetWMF5'
         }
-        Script DSCBootTask {
+        <#Script DSCBootTask {
             GetScript = {
                 $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' -ErrorAction SilentlyContinue
                 if(!($result)) {
@@ -192,9 +192,9 @@ Configuration Boot {
                     schtasks.exe /Create /SC ONSTART /TN '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Invoke-CimMethod -Namespace root/Microsoft/Windows/DesiredStateConfiguration –ClassName MSFT_DSCLocalConfigurationManager -MethodName PerformRequiredConfigurationChecks -Arg @{Flags = [System.UInt32]2 }'"
                 }
             }
-        }
+        }#>
         if(!($PullServerIP)){
-            Script DSCConsistencyTask {
+            <#Script DSCConsistencyTask {
                 GetScript = {
                     $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
                     if(!($result)) {
@@ -223,7 +223,7 @@ Configuration Boot {
                     }
                 }
 
-            }
+            }#>
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
                 Path = 'http://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe'
