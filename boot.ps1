@@ -134,20 +134,20 @@ Configuration Boot {
             }
         }
         Script GetWMF5 {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/B/5/1/B5130F9A-6F07-481A-B4A6-CEDED7C96AE2/WindowsBlue-KB3037315-x64.msu', 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu')}
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/4/9/6/496E0D89-F3B0-4FB0-B110-5F135C30325F/WindowsBlue-KB3055381-x64.msu', 'WindowsBlue-KB3055381-x64.msu')}
 
-            TestScript = {Test-Path -Path 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu'}
+            TestScript = {Test-Path -Path 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu'}
 
             GetScript = {
                 return @{
-                    'Result' = 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu'
+                    'Result' = 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu'
                 }
             }
             DependsOn = @('[File]DevOpsDir','[Script]GetMakeCert')
         }
         Script InstallWmf5 {
             SetScript = {
-                Start-Process -Wait -FilePath 'C:\Windows\Temp\WindowsBlue-KB3037315-x64.msu' -ArgumentList '/quiet' -Verbose
+                Start-Process -Wait -FilePath 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu' -ArgumentList '/quiet' -Verbose
                 Start-Sleep -Seconds 30
                 $global:DSCMachineStatus = 1 
             }
