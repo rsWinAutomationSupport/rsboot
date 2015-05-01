@@ -93,7 +93,6 @@ Function Set-ClientLCM {
       ConfigurationID = "$($nodeinfo.uuid)"
     }
     ConfigurationRepositoryWeb DSCHTTPS {
-      ConfigurationNames = 'DSCHTTPS'
       ServerURL = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"
       CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
       AllowUnsecureConnection = 0
@@ -373,7 +372,7 @@ Configuration Boot {
             }
         }
         else{
-            Script DSCConsistencyTask {
+            <#Script DSCConsistencyTask {
                 GetScript = {
                     $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
                     if(!($result)) {
@@ -401,7 +400,7 @@ Configuration Boot {
                         schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Invoke-CimMethod -Namespace root/Microsoft/Windows/DesiredStateConfiguration –ClassName MSFT_DSCLocalConfigurationManager -MethodName PerformRequiredConfigurationChecks -Arg @{Flags = [System.UInt32]2 }'"
                     }
                 }
-            }
+            }#>
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
