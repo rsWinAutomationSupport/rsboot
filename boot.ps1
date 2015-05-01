@@ -168,66 +168,9 @@ Configuration Boot {
             }
             DependsOn = '[Script]GetWMF5'
         }
-        <#Script DSCBootTask {
-            GetScript = {
-                $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' -ErrorAction SilentlyContinue
-                if(!($result)) {
-                    $result = 'No Boot Task'
-                }
-                return @{
-                    'Result' = $result
-                }
-            }
-            TestScript = {
-                $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' -ErrorAction SilentlyContinue
-                if($test) {
-                    return $true
-                }
-                else {
-                    return $false
-                }
-            }
-            SetScript = {
-                $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' -ErrorAction SilentlyContinue
-                if($test) {
-                    return $true
-                }
-                else {
-                    schtasks.exe /Create /SC ONSTART /TN '\Microsoft\Windows\Desired State Configuration\DSCRestartBootTask' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Invoke-CimMethod -Namespace root/Microsoft/Windows/DesiredStateConfiguration –ClassName MSFT_DSCLocalConfigurationManager -MethodName PerformRequiredConfigurationChecks -Arg @{Flags = [System.UInt32]2 }'"
-                }
-            }
-        }#>
-        if(!($PullServerIP)){
-            <#Script DSCConsistencyTask {
-                GetScript = {
-                    $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-                    if(!($result)) {
-                        $result = 'No Consistency Task'
-                    }
-                    return @{
-                        'Result' = $result
-                    }
-                }
-                TestScript = {
-                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-                    if($test) {
-                        return $true
-                    }
-                    else {
-                        return $false
-                    }
-                }
-                SetScript = {
-                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-                    if($test) {
-                        return $true
-                    }
-                    else {
-                        schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Invoke-CimMethod -Namespace root/Microsoft/Windows/DesiredStateConfiguration –ClassName MSFT_DSCLocalConfigurationManager -MethodName PerformRequiredConfigurationChecks -Arg @{Flags = [System.UInt32]2 }'"
-                    }
-                }
 
-            }#>
+        if(!($PullServerIP)){
+
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
                 Path = 'http://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe'
@@ -373,35 +316,7 @@ Configuration Boot {
             }
         }
         else{
-            <#Script DSCConsistencyTask {
-                GetScript = {
-                    $result = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-                    if(!($result)) {
-                        $result = 'No Consistency Task'
-                    }
-                    return @{
-                        'Result' = $result
-                    }
-                }
-                TestScript = {
-                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-                    if($test) {
-                        return $true
-                    }
-                    else {
-                        return $false
-                    }
-                }
-                SetScript = {
-                    $test = Get-ScheduledTask -TaskName '\Microsoft\Windows\Desired State Configuration\Consistency' -ErrorAction SilentlyContinue
-                    if($test) {
-                        return $true
-                    }
-                    else {
-                        schtasks.exe /Create /sc Minute /mo 15 /TN '\Microsoft\Windows\Desired State Configuration\Consistency' /RU System /F /TR "PowerShell.exe -NonInt -Window Hidden -Command 'Invoke-CimMethod -Namespace root/Microsoft/Windows/DesiredStateConfiguration –ClassName MSFT_DSCLocalConfigurationManager -MethodName PerformRequiredConfigurationChecks -Arg @{Flags = [System.UInt32]2 }'"
-                    }
-                }
-            }#>
+
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
