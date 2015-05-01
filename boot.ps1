@@ -74,7 +74,6 @@ Function Set-PullLCM {
       RefreshMode = 'Push'
       ConfigurationModeFrequencyMins = 30
       AllowModuleOverwrite = 1
-      DebugMode = "ResourceScriptBreakAll"
     }
   }
   PullLCM -OutputPath 'C:\Windows\Temp' -Verbose
