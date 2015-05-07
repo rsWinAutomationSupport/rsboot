@@ -46,7 +46,7 @@ function Create-BootTask {
     }
 }
 function Set-rsPlatform {
-  @'
+@'
     Configuration initDSC {
         Import-DscResource -ModuleName rsPlatform
         Node $env:COMPUTERNAME
@@ -62,48 +62,46 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 
-Function Set-PullLCM {
-@'
-  [DSCLocalConfigurationManager()]
-  Configuration PullLCM {
-    Settings
+function Set-LCM {
+@"
+    [DSCLocalConfigurationManager()]
+    Configuration LCM
     {
-      ActionAfterReboot = 'ContinueConfiguration'
-      RebootNodeIfNeeded = 1
-      ConfigurationMode = 'ApplyAndAutoCorrect'
-      RefreshMode = 'Push'
-      ConfigurationModeFrequencyMins = 30
-      AllowModuleOverwrite = 1
+        Node $env:COMPUTERNAME
+        {
+            if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ){
+                Settings {
+                    AllowModuleOverwrite = 1
+                    ConfigurationMode = 'ApplyAndAutoCorrect'
+                    RefreshMode = 'Pull'
+                    RebootNodeIfNeeded = 1
+                    ConfigurationID = "$($nodeinfo.uuid)"
+                }
+                ConfigurationRepositoryWeb DSCHTTPS {
+                    ServerURL = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"
+                    CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
+                    AllowUnsecureConnection = 0
+                } 
+            }
+            else {
+                Settings
+                {
+                    ActionAfterReboot = 'ContinueConfiguration'
+                    RebootNodeIfNeeded = 1
+                    ConfigurationMode = 'ApplyAndAutoCorrect'
+                    RefreshMode = 'Push'
+                    ConfigurationModeFrequencyMins = 30
+                    AllowModuleOverwrite = 1
+                }
+            }
+        }
     }
-  }
-  PullLCM -OutputPath 'C:\Windows\Temp' -Verbose
-  Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
-'@ | Invoke-Expression -Verbose
-}
-
-Function Set-ClientLCM {
-@'
-  [DSCLocalConfigurationManager()]
-  Configuration ClientLCM {
-    Settings {
-      AllowModuleOverwrite = 1
-      ConfigurationMode = 'ApplyAndAutoCorrect'
-      RefreshMode = 'Pull'
-      RebootNodeIfNeeded = 1
-      ConfigurationID = "$($nodeinfo.uuid)"
+    if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
+        Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo
     }
-    ConfigurationRepositoryWeb DSCHTTPS {
-      ServerURL = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"
-      CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
-      AllowUnsecureConnection = 0
-    } 
-  }
-  if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
-    Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
-  }
-  ClientLCM -OutputPath 'C:\Windows\Temp' -Verbose
-  Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
-'@ | Invoke-Expression -Verbose
+    LCM -OutputPath 'C:\Windows\Temp' -Verbose
+    Set-DscLocalConfigurationManager -Path 'C:\Windows\Temp' -Verbose
+"@ | Invoke-Expression -Verbose
 }
 
 function Set-Pull {
@@ -460,12 +458,7 @@ Create-BootTask
 Create-Secrets
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
-if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ){
-  Set-ClientLCM
-}
-else {
-  Set-PullLCM
-}
+Set-LCM
 if( !($PullServerIP) ){
     Set-rsPlatform
     Set-Pull
