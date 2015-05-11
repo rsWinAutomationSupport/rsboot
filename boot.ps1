@@ -436,7 +436,7 @@ Configuration Boot {
                             $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                             $queue.Send($msg)
                             Start-Sleep -Seconds 30
-                            $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
+                            $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$((($nodeinfo.dsc_Config) -split '.ps1')[0])`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
                         }
                         catch {
                             Write-Verbose "Error retrieving configuration $($_.Exception.message)"
