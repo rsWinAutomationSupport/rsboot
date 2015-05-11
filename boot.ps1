@@ -81,7 +81,7 @@ function Set-LCM {
                     ServerURL = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"
                     CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
                     AllowUnsecureConnection = 0
-                    RegistrationKey = $nodeinfo.shared_key
+                    RegistrationKey = $($nodeinfo.shared_key)
                     ConfigurationNames = (($nodeinfo.dsc_Config) -split '.ps1')[0]
                 } 
             }
