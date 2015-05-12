@@ -5,7 +5,7 @@
     [string] $dsc_Config,
     [string] $shared_key,
     [int] $PullServerPort = 8080,
-[Hashtable] $secrets)
+    [Hashtable] $secrets)
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 [Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
 $global:PSBoundParameters = $PSBoundParameters
@@ -122,7 +122,7 @@ Configuration Boot {
             Type = 'Directory'
         }
         Script GetMakeCert {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
+            SetScript = {Invoke-WebRequest -Uri 'http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe' -OutFile 'C:\Windows\system32\makecert.exe' -UseBasicParsing}
 
             TestScript = {Test-Path -Path 'C:\Windows\system32\makecert.exe'}
 
@@ -133,20 +133,20 @@ Configuration Boot {
             }
         }
         Script GetWMF4 {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows8-RT-KB2799888-x64.msu','C:\rs-pkgs\Windows8-RT-KB2799888-x64.msu')}
+            SetScript = {Invoke-WebRequest -Uri 'http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu' -OutFile 'C:\Windows\temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -UseBasicParsing}
 
-            TestScript = {Test-Path -Path 'C:\Windows\Temp\Windows8-RT-KB2799888-x64.msu'}
+            TestScript = {Test-Path -Path 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu'}
 
             GetScript = {
                 return @{
-                    'Result' = 'C:\Windows\Temp\Windows8-RT-KB2799888-x64.msu'
+                    'Result' = 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu'
                 }
             }
             DependsOn = @('[File]DevOpsDir','[Script]GetMakeCert')
         }
         Script InstallWMF4 {
             SetScript = {
-                Start-Process -Wait -FilePath 'C:\Windows\Temp\Windows8-RT-KB2799888-x64.msu' -ArgumentList '/quiet' -Verbose
+                Start-Process -Wait -FilePath 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -ArgumentList '/quiet' -Verbose
                 Start-Sleep -Seconds 30
                 $global:DSCMachineStatus = 1 
             }
@@ -161,7 +161,7 @@ Configuration Boot {
                     'Result' = $PSVersionTable.PSVersion.Major
                 }
             }
-            DependsOn = '[Script]GetWMF5'
+            DependsOn = '[Script]GetWMF4'
         }
 
         if(!($PullServerIP)){
