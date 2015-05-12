@@ -139,7 +139,11 @@ Configuration Boot {
         Script GetWMF4 {
             SetScript = {Invoke-WebRequest -Uri 'http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu' -OutFile 'C:\Windows\temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -UseBasicParsing}
 
-            TestScript = {Test-Path -Path 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu'}
+            TestScript = {
+                if( $PSVersionTable.PSVersion.Major -ge 4 ) { return $true }
+                if( -not (Test-Path -Path 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu') ) { return $false }
+                else{ return $true }
+            }
 
             GetScript = {
                 return @{
