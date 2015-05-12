@@ -64,28 +64,26 @@ function Set-rsPlatform {
 
 function Set-LCM {
 @"
-    [DSCLocalConfigurationManager()]
+    
     Configuration LCM
     {
         Node $env:COMPUTERNAME
         {
-            if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ){
-                Settings {
-                    AllowModuleOverwrite = 1
-                    ConfigurationMode = 'ApplyAndAutoCorrect'
-                    RefreshMode = 'Pull'
-                    RebootNodeIfNeeded = 1
-                    ConfigurationID = "$($nodeinfo.uuid)"
-                }
-                ConfigurationRepositoryWeb DSCHTTPS {
-                    ServerURL = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"
+            LocalConfigurationManager
+            {
+                if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ){
+                    AllowModuleOverwrite = 'True'
+                    ConfigurationID = $($nodeinfo.uuid)
                     CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
-                    AllowUnsecureConnection = 0
-                } 
-            }
-            else {
-                Settings
-                {
+                    ConfigurationModeFrequencyMins = 30
+                    ConfigurationMode = 'ApplyAndAutoCorrect'
+                    RebootNodeIfNeeded = 'True'
+                    RefreshMode = 'Pull'
+                    RefreshFrequencyMins = 15
+                    DownloadManagerName = 'WebDownloadManager'
+                    DownloadManagerCustomData = (@{ServerUrl = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
+                }
+                else {
                     ActionAfterReboot = 'ContinueConfiguration'
                     RebootNodeIfNeeded = 1
                     ConfigurationMode = 'ApplyAndAutoCorrect'
