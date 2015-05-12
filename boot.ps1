@@ -64,36 +64,40 @@ function Set-rsPlatform {
 
 function Set-LCM {
 @"
-    
     Configuration LCM
     {
         Node $env:COMPUTERNAME
         {
-            LocalConfigurationManager
-            {
                 if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ){
-                    AllowModuleOverwrite = 'True'
-                    ConfigurationID = $($nodeinfo.uuid)
-                    CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
-                    ConfigurationModeFrequencyMins = 30
-                    ConfigurationMode = 'ApplyAndAutoCorrect'
-                    RebootNodeIfNeeded = 'True'
-                    RefreshMode = 'Pull'
-                    RefreshFrequencyMins = 15
-                    DownloadManagerName = 'WebDownloadManager'
-                    DownloadManagerCustomData = (@{ServerUrl = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
+                    LocalConfigurationManager
+                    {
+                        AllowModuleOverwrite = 'True'
+                        ConfigurationID = $($nodeinfo.uuid)
+                        CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
+                        ConfigurationModeFrequencyMins = 30
+                        ConfigurationMode = 'ApplyAndAutoCorrect'
+                        RebootNodeIfNeeded = 'True'
+                        RefreshMode = 'Pull'
+                        RefreshFrequencyMins = 15
+                        DownloadManagerName = 'WebDownloadManager'
+                        DownloadManagerCustomData = (@{ServerUrl = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
+                    }
                 }
                 else {
-                    ActionAfterReboot = 'ContinueConfiguration'
-                    RebootNodeIfNeeded = 1
-                    ConfigurationMode = 'ApplyAndAutoCorrect'
-                    RefreshMode = 'Push'
-                    ConfigurationModeFrequencyMins = 30
-                    AllowModuleOverwrite = 1
+                    LocalConfigurationManager
+                    {
+                        AllowModuleOverwrite = 'True'
+                        ConfigurationModeFrequencyMins = 30
+                        ConfigurationMode = 'ApplyAndAutoCorrect'
+                        RebootNodeIfNeeded = 'True'
+                        RefreshMode = 'PUSH'
+                        RefreshFrequencyMins = 15
+                    }
                 }
-            }
         }
     }
+
+
     if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
         Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo
     }
@@ -451,7 +455,6 @@ Configuration Boot {
         }
     } 
 }
-
 Create-BootTask
 Create-Secrets
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
