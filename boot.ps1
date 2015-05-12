@@ -134,26 +134,26 @@ Configuration Boot {
                 }
             }
         }
-        Script GetWMF5 {
-            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/4/9/6/496E0D89-F3B0-4FB0-B110-5F135C30325F/WindowsBlue-KB3055381-x64.msu', 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu')}
+        Script GetWMF4 {
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows8-RT-KB2799888-x64.msu','C:\rs-pkgs\Windows8-RT-KB2799888-x64.msu')}
 
-            TestScript = {Test-Path -Path 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu'}
+            TestScript = {Test-Path -Path 'C:\Windows\Temp\Windows8-RT-KB2799888-x64.msu'}
 
             GetScript = {
                 return @{
-                    'Result' = 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu'
+                    'Result' = 'C:\Windows\Temp\Windows8-RT-KB2799888-x64.msu'
                 }
             }
             DependsOn = @('[File]DevOpsDir','[Script]GetMakeCert')
         }
-        Script InstallWmf5 {
+        Script InstallWMF4 {
             SetScript = {
-                Start-Process -Wait -FilePath 'C:\Windows\Temp\WindowsBlue-KB3055381-x64.msu' -ArgumentList '/quiet' -Verbose
+                Start-Process -Wait -FilePath 'C:\Windows\Temp\Windows8-RT-KB2799888-x64.msu' -ArgumentList '/quiet' -Verbose
                 Start-Sleep -Seconds 30
                 $global:DSCMachineStatus = 1 
             }
             TestScript = {
-                if($PSVersionTable.PSVersion.Major -ge 5) 
+                if($PSVersionTable.PSVersion.Major -ge 4) 
                 {return $true}
                 else 
                 {return $false}
