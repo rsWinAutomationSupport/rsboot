@@ -72,7 +72,7 @@ function Set-LCM {
                     LocalConfigurationManager
                     {
                         AllowModuleOverwrite = 'True'
-                        ConfigurationID = $($nodeinfo.uuid)
+                        ConfigurationID = "$($nodeinfo.uuid)"
                         CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
                         ConfigurationModeFrequencyMins = 30
                         ConfigurationMode = 'ApplyAndAutoCorrect'
