@@ -126,7 +126,7 @@ Configuration Boot {
             Type = 'Directory'
         }
         Script GetMakeCert {
-            SetScript = {Invoke-WebRequest -Uri 'http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe' -OutFile 'C:\Windows\system32\makecert.exe' -UseBasicParsing}
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
 
             TestScript = {Test-Path -Path 'C:\Windows\system32\makecert.exe'}
 
