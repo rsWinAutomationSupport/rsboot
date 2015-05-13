@@ -78,7 +78,7 @@ function Set-LCM {
                         ConfigurationMode = 'ApplyAndAutoCorrect'
                         RebootNodeIfNeeded = 'True'
                         RefreshMode = 'Pull'
-                        RefreshFrequencyMins = 15
+                        RefreshFrequencyMins = 30
                         DownloadManagerName = 'WebDownloadManager'
                         DownloadManagerCustomData = (@{ServerUrl = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
                     }
@@ -91,7 +91,7 @@ function Set-LCM {
                         ConfigurationMode = 'ApplyAndAutoCorrect'
                         RebootNodeIfNeeded = 'True'
                         RefreshMode = 'PUSH'
-                        RefreshFrequencyMins = 15
+                        RefreshFrequencyMins = 30
                     }
                 }
         }
