@@ -469,6 +469,6 @@ if( !($PullServerIP) ){
     Set-Pull
 }
 else {
-    Update-DscConfiguration -Wait -Verbose
+    Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
