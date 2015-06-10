@@ -270,7 +270,7 @@ Configuration Boot {
                     Get-ChildItem -Path Cert:\LocalMachine\My\ |
                     Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
                     Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -ss my, -sr localmachine, -len 2048
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -sky exchange, -ss my, -sr localmachine, -len 2048
                 }
                 TestScript = {
                     if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} ) 
