@@ -534,7 +534,9 @@ Configuration Boot {
 
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Starting"
 Create-BootTask
-Get-PullServerInfo
+if($PullServerAddress){
+    Get-PullServerInfo
+}
 Create-Secrets
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
