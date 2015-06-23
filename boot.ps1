@@ -532,6 +532,7 @@ Configuration Boot {
 }
 
 
+<#
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Starting"
 Create-BootTask
 if($PullServerAddress){
@@ -542,8 +543,11 @@ if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").coun
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
 Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
+#>
 
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
+
+<#
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation"
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
@@ -564,3 +568,5 @@ Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start Consistency"
 
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start Consistency"
+
+#>
