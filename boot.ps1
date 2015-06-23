@@ -182,6 +182,7 @@ Configuration Boot {
             DestinationPath = "C:\test.txt"
             Ensure = 'Present'
             Type = 'File'
+            Contents = 'Bee'
         }
 
 
