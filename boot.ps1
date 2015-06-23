@@ -548,9 +548,10 @@ Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 
 <#
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation"
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation" #>
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
+<#
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start-DSCConfiguration"
 
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Job Started - $(get-job | Where {$_.Command -match 'Start-DscConfiguration'})"
