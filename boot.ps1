@@ -525,9 +525,22 @@ if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").coun
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
 Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
+
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
-Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation"
+Start-DscConfiguration -Force -Path 'C:\Windows\Temp'
+Do {
+$StartDSCComplete = (get-job | Where {$_.Command -match 'Start-DscConfiguration'}).State
+    if($StartDSCComplete -ne 'Completed'){
+        Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Start-DSCConfiguration Not Complete - Sleeping"
+        Sleep 30
+    }
+    else{Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Start-DSCConfiguration Complete"}
+}While($StartDSCComplete -ne 'Completed')
+
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start-DSCConfiguration"
 Set-LCM
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Set-LCM"
 if( !($PullServerAddress) ){
     Set-rsPlatform
     Set-Pull
@@ -535,4 +548,7 @@ if( !($PullServerAddress) ){
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start Consistency"
+
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start Consistency"
