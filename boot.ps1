@@ -546,7 +546,7 @@ Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
 #>
 
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
-Sleep 120
+Sleep 30
 <#
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation" #>
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
