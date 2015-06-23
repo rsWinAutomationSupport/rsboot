@@ -184,7 +184,10 @@ Configuration Boot {
         Script GetMakeCert {
             SetScript = {Invoke-WebRequest -Uri 'http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe' -OutFile 'C:\Windows\system32\makecert.exe' -UseBasicParsing}
                         
-            TestScript = {Test-Path -Path 'C:\Windows\system32\makecert.exe'}
+            TestScript = {
+            
+            Test-Path -Path 'C:\Windows\system32\makecert.exe'
+            }
 
             GetScript = {
                 return @{
@@ -529,16 +532,11 @@ Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation"
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp'
-Do {
-$StartDSCComplete = (get-job | Where {$_.Command -match 'Start-DscConfiguration'}).State
-    if($StartDSCComplete -ne 'Completed'){
-        Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Start-DSCConfiguration Not Complete - Sleeping"
-        Sleep 30
-    }
-    else{Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Start-DSCConfiguration Complete"}
-}While($StartDSCComplete -ne 'Completed')
 
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start-DSCConfiguration"
+
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Job Started - $(get-job | Where {$_.Command -match 'Start-DscConfiguration'})"
+
 Set-LCM
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Set-LCM"
 if( !($PullServerAddress) ){
