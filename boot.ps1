@@ -13,7 +13,8 @@
 $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
-    
+
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Begin Get-PullServerInfo"
 
     $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
@@ -44,7 +45,7 @@ function Get-PullServerInfo{
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
 
-    
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - End Get-PullServerInfo"    
 }
 
 
@@ -53,6 +54,7 @@ function Get-PullServerInfo{
 
 
 function Create-Secrets {
+Add-Content -Path "C:\log.txt" -Value "Begin Create Secrets"
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
@@ -76,10 +78,13 @@ function Create-Secrets {
     if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
     }
+Add-Content -Path "C:\log.txt" -Value "End Create-Secrets"
 }
 
 
 function Create-BootTask {
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Begin Create-BootTask"
+
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
         $A = New-ScheduledTaskAction –Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -file $PSCommandPath $arguments"
@@ -89,6 +94,7 @@ function Create-BootTask {
         $D = New-ScheduledTask -Action $A -Principal $P -Trigger $T -Settings $S
         Register-ScheduledTask rsBoot -InputObject $D
     }
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - End Create-BootTask"
 }
 
 
@@ -511,13 +517,15 @@ Configuration Boot {
 }
 
 
+Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Starting"
 Create-BootTask
 Get-PullServerInfo
 Create-Secrets
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
-Boot -PullServerIP $PullServerI -OutputPath 'C:\Windows\Temp' -Verbose
+Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
+Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM
 if( !($PullServerAddress) ){
