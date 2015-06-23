@@ -1,19 +1,59 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
-    [string] $PullServerIP = $null,
-    [string] $PullServerName = 'PullServer',
-    [string] $dsc_Config,
-    [string] $shared_key,
-    [int] $PullServerPort = 8080,
+    [String] $PullServerAddress,
+    [String] $dsc_config,
+    [String] $shared_key,
+    [int] $PullServerPort = '8080',
     [Hashtable] $secrets)
+
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 [Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
 $global:PSBoundParameters = $PSBoundParameters
+
+function Get-PullServerInfo{
+    
+
+    $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
+
+
+    $PullServerValidIPs = @()
+
+    foreach($IP in $PullServerPossibleIP){
+
+        $check =  Test-NetConnection $IP -RemotePort $PullServerPort
+
+        if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+    }
+
+
+    if($PullServerValidIPs.values -contains 'Private Network'){
+        $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+    }
+    else{
+        $PullServerIP = $PullServerValidIPs.keys | Get-Random
+    }
+
+    $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
+
+    $uri = "https://google.com"
+    $webRequest = [Net.WebRequest]::Create($uri)
+    try { $webRequest.GetResponse() } catch {}
+    $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+
+    $PullServerName | Set-Variable -Name PullServerName -Scope Global
+}
+
+
+
+
+
+
 function Create-Secrets {
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
+        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
@@ -34,6 +74,8 @@ function Create-Secrets {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
     }
 }
+
+
 function Create-BootTask {
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
@@ -45,6 +87,8 @@ function Create-BootTask {
         Register-ScheduledTask rsBoot -InputObject $D
     }
 }
+
+
 function Set-rsPlatform {
 @'
     Configuration initDSC {
@@ -61,6 +105,7 @@ function Set-rsPlatform {
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
+
 
 function Set-LCM {
 @"
@@ -106,6 +151,7 @@ function Set-LCM {
 "@ | Invoke-Expression -Verbose
 }
 
+
 function Set-Pull {
     try{
         Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
@@ -114,6 +160,7 @@ function Set-Pull {
         Write-Verbose "Error in rsPullServer $($_.Exception.message)"
     }
 }
+
 
 Configuration Boot {
     param(
@@ -459,15 +506,18 @@ Configuration Boot {
         }
     } 
 }
+
+
 Create-BootTask
+Get-PullServerInfo
 Create-Secrets
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
-Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
+Boot -PullServerIP $PullServerI -OutputPath 'C:\Windows\Temp' -Verbose
 Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM
-if( !($PullServerIP) ){
+if( !($PullServerAddress) ){
     Set-rsPlatform
     Set-Pull
 }
