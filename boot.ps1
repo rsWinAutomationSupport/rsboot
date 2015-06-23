@@ -1,13 +1,15 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
+    [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
     [String] $PullServerAddress,
     [String] $dsc_config,
     [String] $shared_key,
     [int] $PullServerPort = '8080',
-    [Hashtable] $secrets)
+    [Hashtable] $secrets
+    )
 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
-[Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
+[Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
@@ -53,7 +55,6 @@ function Create-Secrets {
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
-        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
