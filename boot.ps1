@@ -176,6 +176,16 @@ Configuration Boot {
         [String] $PullServerIP
     )
     node $env:COMPUTERNAME {
+        
+
+        File Test{
+            DestinationPath = "C:\test.txt"
+            Ensure = 'Present'
+            Type = 'File'
+        }
+
+
+        <#
         File DevOpsDir{
             DestinationPath = [Environment]::GetEnvironmentVariable('defaultPath','Machine')
             Ensure = 'Present'
@@ -516,6 +526,7 @@ Configuration Boot {
                 DependsOn = @('[WindowsFeature]MSMQ','[Script]SetHostFile')
             }                
         }
+        #>
     } 
 }
 
@@ -531,7 +542,7 @@ Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
 
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation"
-Start-DscConfiguration -Force -Path 'C:\Windows\Temp'
+Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
 Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start-DSCConfiguration"
 
