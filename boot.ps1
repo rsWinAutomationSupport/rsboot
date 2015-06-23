@@ -43,6 +43,8 @@ function Get-PullServerInfo{
     $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
+
+    
 }
 
 
