@@ -14,35 +14,39 @@ $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
 
-    $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
+    if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
+        $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
 
-    $PullServerValidIPs = @()
+        $PullServerValidIPs = @()
 
-    foreach($IP in $PullServerPossibleIP){
+        foreach($IP in $PullServerPossibleIP){
 
-        $check =  Test-NetConnection $IP -RemotePort $PullServerPort
+            $check =  Test-NetConnection $IP -RemotePort $PullServerPort
 
-        if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+            if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+        }
+
+
+        if($PullServerValidIPs.values -contains 'Private Network'){
+            $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+        }
+        else{
+            $PullServerIP = $PullServerValidIPs.keys | Get-Random
+        }
+
     }
-
-
-    if($PullServerValidIPs.values -contains 'Private Network'){
-        $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
-    }
-    else{
-        $PullServerIP = $PullServerValidIPs.keys | Get-Random
-    }
+    else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
 
     $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
 
-    $uri = "https://google.com"
+    $uri = ("https://",$PullServerIP,":8080" -join '')
     $webRequest = [Net.WebRequest]::Create($uri)
     try { $webRequest.GetResponse() } catch {}
     $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
-
+    
 
 }
 
@@ -573,7 +577,7 @@ Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
 Set-LCM
 
-if( !($PullServerAddress) ){
+if(!($PullServerAddress)){
     Set-rsPlatform
     Set-Pull
 }
