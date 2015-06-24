@@ -14,8 +14,6 @@ $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
 
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Begin Get-PullServerInfo"
-
     $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
 
@@ -45,7 +43,7 @@ Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Begin Get-PullServerInfo"
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
 
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - End Get-PullServerInfo"    
+
 }
 
 
@@ -54,7 +52,7 @@ Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - End Get-PullServerInfo"
 
 
 function Create-Secrets {
-Add-Content -Path "C:\log.txt" -Value "Begin Create Secrets"
+
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
@@ -78,12 +76,12 @@ Add-Content -Path "C:\log.txt" -Value "Begin Create Secrets"
     if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
     }
-Add-Content -Path "C:\log.txt" -Value "End Create-Secrets"
+
 }
 
 
 function Create-BootTask {
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Begin Create-BootTask"
+
 
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
@@ -94,7 +92,7 @@ Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Begin Create-BootTask"
         $D = New-ScheduledTask -Action $A -Principal $P -Trigger $T -Settings $S
         Register-ScheduledTask rsBoot -InputObject $D
     }
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - End Create-BootTask"
+
 }
 
 
@@ -178,20 +176,13 @@ Configuration Boot {
     node $env:COMPUTERNAME {
         
 
-        File Test{
-            DestinationPath = "C:\test.txt"
-            Ensure = 'Present'
-            Type = 'File'
-            Contents = 'Bee'
-        }
-
-
-        <#
         File DevOpsDir{
             DestinationPath = [Environment]::GetEnvironmentVariable('defaultPath','Machine')
             Ensure = 'Present'
             Type = 'Directory'
         }
+
+
         Script GetMakeCert {
             SetScript = {Invoke-WebRequest -Uri 'http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe' -OutFile 'C:\Windows\system32\makecert.exe' -UseBasicParsing}
                         
@@ -206,6 +197,8 @@ Configuration Boot {
                 }
             }
         }
+
+
         Script GetWMF4 {
             SetScript = {Invoke-WebRequest -Uri 'http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu' -OutFile 'C:\Windows\temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -UseBasicParsing}
 
@@ -222,6 +215,8 @@ Configuration Boot {
             }
             DependsOn = @('[File]DevOpsDir','[Script]GetMakeCert')
         }
+
+        
         Script InstallWMF4 {
             SetScript = {
                 Start-Process -Wait -FilePath 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -ArgumentList '/quiet' -Verbose
@@ -242,6 +237,7 @@ Configuration Boot {
             DependsOn = '[Script]GetWMF4'
         }
 
+
         if(!($PullServerIP)){
 
             Package InstallGit {
@@ -251,6 +247,8 @@ Configuration Boot {
                 Arguments = '/verysilent'
                 Ensure = 'Present'
             }
+
+
             Registry SetGitPath {       
                 Ensure = 'Present'
                 Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
@@ -265,6 +263,8 @@ Configuration Boot {
                     }
                 )
             } 
+
+
             Script UpdateGitConfig {
                 SetScript = {
                     Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
@@ -283,6 +283,8 @@ Configuration Boot {
                 }
                 DependsOn = '[Registry]SetGitPath'
             }
+
+
             Script Clone_rsConfigs {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
@@ -304,6 +306,8 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]UpdateGitConfig'
             }
+            
+            
             File rsPlatformDir {
                 SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPlatform' -join '\')
                 DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
@@ -313,6 +317,8 @@ Configuration Boot {
                 Ensure = 'Present'
                 DependsOn = '[Script]Clone_rsConfigs'
             }
+            
+            
             Script ClonersPackageSourceManager {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
@@ -334,6 +340,8 @@ Configuration Boot {
                 }
                 DependsOn = '[File]rsPlatformDir'
             }
+            
+            
             Script CreateServerCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
@@ -355,15 +363,21 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
+            
+            
             WindowsFeature IIS {
                 Ensure = 'Present'
                 Name = 'Web-Server'
             }
+            
+            
             WindowsFeature DSCServiceFeature {
                 Ensure = 'Present'
                 Name = 'DSC-Service'
                 DependsOn = '[WindowsFeature]IIS'
             }
+            
+            
             Script InstallRootCertificate {
                 SetScript = {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
@@ -388,6 +402,7 @@ Configuration Boot {
                 DependsOn = '[Script]CreateServerCertificate'
             }
         }
+
         else{
 
             Script CreateEncryptionCertificate {
@@ -411,10 +426,14 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
+            
+            
             WindowsFeature MSMQ {
                 Name = 'MSMQ'
                 Ensure = 'Present'
             }
+            
+            
             Script GetPullPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -473,6 +492,8 @@ Configuration Boot {
                 }
                 DependsOn = '[WindowsFeature]MSMQ'
             }
+            
+            
             Script SetHostFile {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -490,6 +511,8 @@ Configuration Boot {
                 }
                 DependsOn = '[WindowsFeature]MSMQ'
             }
+            
+            
             Script SendClientPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -527,47 +550,36 @@ Configuration Boot {
                 DependsOn = @('[WindowsFeature]MSMQ','[Script]SetHostFile')
             }                
         }
-        #>
     } 
 }
 
 
-<#
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Starting"
+
+
 Create-BootTask
 if($PullServerAddress){
     Get-PullServerInfo
 }
+
 Create-Secrets
+
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
-Add-Content -Path "C:\log.txt" -Value "Post-WinRM"
-#>
 
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
-Sleep 30
-<#
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post MOF Creation" #>
+
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
-<#
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start-DSCConfiguration"
-
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Job Started - $(get-job | Where {$_.Command -match 'Start-DscConfiguration'})"
-
 Set-LCM
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Set-LCM"
+
 if( !($PullServerAddress) ){
     Set-rsPlatform
     Set-Pull
 }
+
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start Consistency"
 
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
-Add-Content -Path "C:\log.txt" -Value "$(Get-Date) - Post Start Consistency"
-
-#>
