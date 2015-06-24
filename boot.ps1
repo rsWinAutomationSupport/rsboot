@@ -22,7 +22,7 @@ function Get-PullServerInfo{
 
         foreach($IP in $PullServerPossibleIP){
 
-            $check =  Test-NetConnection $IP -RemotePort $PullServerPort
+            $check =  Test-NetConnection $IP -Port $PullServerPort
 
             if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
         }
@@ -60,6 +60,8 @@ function Create-Secrets {
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
+        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
+        $global:PSBoundParameters.Add('PullServerIP',$PullServerIP)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
