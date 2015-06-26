@@ -1,53 +1,46 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
-    [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
     [String] $PullServerAddress,
     [String] $dsc_config,
     [String] $shared_key,
     [int] $PullServerPort = '8080',
-    [Hashtable] $secrets
-    )
+    [Hashtable] $secrets)
 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
-[Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
+[Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
 $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
+    
 
-    if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
-        $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
-
-
-        $PullServerValidIPs = @()
-
-        foreach($IP in $PullServerPossibleIP){
-
-            $check =  Test-NetConnection $IP -Port $PullServerPort
-
-            if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
-        }
+    $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
 
-        if($PullServerValidIPs.values -contains 'Private Network'){
-            $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
-        }
-        else{
-            $PullServerIP = $PullServerValidIPs.keys | Get-Random
-        }
+    $PullServerValidIPs = @()
 
+    foreach($IP in $PullServerPossibleIP){
+
+        $check =  Test-NetConnection $IP -RemotePort $PullServerPort
+
+        if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
     }
-    else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
+
+
+    if($PullServerValidIPs.values -contains 'Private Network'){
+        $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+    }
+    else{
+        $PullServerIP = $PullServerValidIPs.keys | Get-Random
+    }
 
     $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
 
-    $uri = ("https://",$PullServerIP,":8080" -join '')
+    $uri = "https://google.com"
     $webRequest = [Net.WebRequest]::Create($uri)
     try { $webRequest.GetResponse() } catch {}
     $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
-    
-
 }
 
 
@@ -56,13 +49,11 @@ function Get-PullServerInfo{
 
 
 function Create-Secrets {
-
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
-        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
-        $global:PSBoundParameters.Add('PullServerIP',$PullServerIP)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
+        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
@@ -82,13 +73,10 @@ function Create-Secrets {
     if(Test-Path (Join-Path $defaultPath 'secrets.json') ) {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
     }
-
 }
 
 
 function Create-BootTask {
-
-
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
         $A = New-ScheduledTaskAction –Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -file $PSCommandPath $arguments"
@@ -98,7 +86,6 @@ function Create-BootTask {
         $D = New-ScheduledTask -Action $A -Principal $P -Trigger $T -Settings $S
         Register-ScheduledTask rsBoot -InputObject $D
     }
-
 }
 
 
@@ -131,7 +118,7 @@ function Set-LCM {
                     {
                         AllowModuleOverwrite = 'True'
                         ConfigurationID = "$($nodeinfo.uuid)"
-                        CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
+                        CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($env:COMPUTERNAME)_enc").Thumbprint
                         ConfigurationModeFrequencyMins = 30
                         ConfigurationMode = 'ApplyAndAutoCorrect'
                         RebootNodeIfNeeded = 'True'
@@ -180,22 +167,15 @@ Configuration Boot {
         [String] $PullServerIP
     )
     node $env:COMPUTERNAME {
-        
-
         File DevOpsDir{
             DestinationPath = [Environment]::GetEnvironmentVariable('defaultPath','Machine')
             Ensure = 'Present'
             Type = 'Directory'
         }
-
-
         Script GetMakeCert {
-            SetScript = {Invoke-WebRequest -Uri 'http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe' -OutFile 'C:\Windows\system32\makecert.exe' -UseBasicParsing}
-                        
-            TestScript = {
-            
-            Test-Path -Path 'C:\Windows\system32\makecert.exe'
-            }
+            SetScript = {(New-Object -TypeName System.Net.webclient).DownloadFile('http://76112b97f58772cd1bdd-6e9d6876b769e06639f2cd7b465695c5.r57.cf1.rackcdn.com/makecert.exe', 'C:\Windows\system32\makecert.exe')}
+
+            TestScript = {Test-Path -Path 'C:\Windows\system32\makecert.exe'}
 
             GetScript = {
                 return @{
@@ -203,8 +183,6 @@ Configuration Boot {
                 }
             }
         }
-
-
         Script GetWMF4 {
             SetScript = {Invoke-WebRequest -Uri 'http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu' -OutFile 'C:\Windows\temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -UseBasicParsing}
 
@@ -221,8 +199,6 @@ Configuration Boot {
             }
             DependsOn = @('[File]DevOpsDir','[Script]GetMakeCert')
         }
-
-        
         Script InstallWMF4 {
             SetScript = {
                 Start-Process -Wait -FilePath 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -ArgumentList '/quiet' -Verbose
@@ -243,7 +219,6 @@ Configuration Boot {
             DependsOn = '[Script]GetWMF4'
         }
 
-
         if(!($PullServerIP)){
 
             Package InstallGit {
@@ -253,8 +228,6 @@ Configuration Boot {
                 Arguments = '/verysilent'
                 Ensure = 'Present'
             }
-
-
             Registry SetGitPath {       
                 Ensure = 'Present'
                 Key = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
@@ -269,8 +242,6 @@ Configuration Boot {
                     }
                 )
             } 
-
-
             Script UpdateGitConfig {
                 SetScript = {
                     Start-Process -Wait 'C:\Program Files (x86)\Git\bin\git.exe' -ArgumentList "config $('--', 'system' -join '') user.email $env:COMPUTERNAME@localhost.local"
@@ -289,8 +260,6 @@ Configuration Boot {
                 }
                 DependsOn = '[Registry]SetGitPath'
             }
-
-
             Script Clone_rsConfigs {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
@@ -312,8 +281,6 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]UpdateGitConfig'
             }
-            
-            
             File rsPlatformDir {
                 SourcePath = Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($d.mR, 'rsPlatform' -join '\')
                 DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
@@ -323,8 +290,6 @@ Configuration Boot {
                 Ensure = 'Present'
                 DependsOn = '[Script]Clone_rsConfigs'
             }
-            
-            
             Script ClonersPackageSourceManager {
                 SetScript = {
                     $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
@@ -346,8 +311,6 @@ Configuration Boot {
                 }
                 DependsOn = '[File]rsPlatformDir'
             }
-            
-            
             Script CreateServerCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
@@ -369,21 +332,15 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
-            
-            
             WindowsFeature IIS {
                 Ensure = 'Present'
                 Name = 'Web-Server'
             }
-            
-            
             WindowsFeature DSCServiceFeature {
                 Ensure = 'Present'
                 Name = 'DSC-Service'
                 DependsOn = '[WindowsFeature]IIS'
             }
-            
-            
             Script InstallRootCertificate {
                 SetScript = {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
@@ -391,11 +348,11 @@ Configuration Boot {
                     Remove-Item
                     $store = Get-Item Cert:\LocalMachine\Root
                     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
                     $store.Close()
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
                     {return $true}
                     else 
                     {return $false}
@@ -408,38 +365,33 @@ Configuration Boot {
                 DependsOn = '[Script]CreateServerCertificate'
             }
         }
-
         else{
 
             Script CreateEncryptionCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
                     $cN = 'CN=' + $env:COMPUTERNAME + '_enc'
-                    Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
-                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss root, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
+                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss My, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
                 }
                 TestScript = {
-                    if( (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
+                    if( (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
                         ).Thumbprint
                     }
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
-            
-            
             WindowsFeature MSMQ {
                 Name = 'MSMQ'
                 Ensure = 'Present'
             }
-            
-            
             Script GetPullPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -498,8 +450,6 @@ Configuration Boot {
                 }
                 DependsOn = '[WindowsFeature]MSMQ'
             }
-            
-            
             Script SetHostFile {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -517,8 +467,6 @@ Configuration Boot {
                 }
                 DependsOn = '[WindowsFeature]MSMQ'
             }
-            
-            
             Script SendClientPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -560,32 +508,20 @@ Configuration Boot {
 }
 
 
-
-
 Create-BootTask
-if($PullServerAddress){
-    Get-PullServerInfo
-}
-
+Get-PullServerInfo
 Create-Secrets
-
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
-
-Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
-
-Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
-
+Boot -PullServerIP $PullServerI -OutputPath 'C:\Windows\Temp' -Verbose
+Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
 Set-LCM
-
-if(!($PullServerAddress)){
+if( !($PullServerAddress) ){
     Set-rsPlatform
     Set-Pull
 }
-
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
-
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
