@@ -1,19 +1,67 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
-    [string] $PullServerIP = $null,
-    [string] $PullServerName = 'PullServer',
-    [string] $dsc_Config,
-    [string] $shared_key,
-    [int] $PullServerPort = 8080,
-    [Hashtable] $secrets)
+    [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
+    [String] $PullServerAddress,
+    [String] $dsc_config,
+    [String] $shared_key,
+    [int] $PullServerPort = '8080',
+    [Hashtable] $secrets
+    )
+
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
-[Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
+[Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 $global:PSBoundParameters = $PSBoundParameters
+
+
+function Get-PullServerInfo{
+
+    if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
+        $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
+
+
+        $PullServerValidIPs = @()
+
+        foreach($IP in $PullServerPossibleIP){
+
+            $check =  Test-NetConnection $IP -Port $PullServerPort
+
+            if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+        }
+
+
+        if($PullServerValidIPs.values -contains 'Private Network'){
+            $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+        }
+        else{
+            $PullServerIP = $PullServerValidIPs.keys | Get-Random
+        }
+
+    }
+    else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
+
+    $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
+
+    $uri = ("https://",$PullServerIP,":8080" -join '')
+    $webRequest = [Net.WebRequest]::Create($uri)
+    try { $webRequest.GetResponse() } catch {}
+    $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+
+    $PullServerName | Set-Variable -Name PullServerName -Scope Global
+    
+
+}
+
+
+
+
+
+
 function Create-Secrets {
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
+        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
@@ -34,6 +82,8 @@ function Create-Secrets {
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
     }
 }
+
+
 function Create-BootTask {
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
@@ -45,6 +95,8 @@ function Create-BootTask {
         Register-ScheduledTask rsBoot -InputObject $D
     }
 }
+
+
 function Set-rsPlatform {
 @'
     Configuration initDSC {
@@ -62,6 +114,7 @@ function Set-rsPlatform {
 '@ | Invoke-Expression -Verbose
 }
 
+
 function Set-LCM {
 @"
     Configuration LCM
@@ -73,7 +126,7 @@ function Set-LCM {
                     {
                         AllowModuleOverwrite = 'True'
                         ConfigurationID = "$($nodeinfo.uuid)"
-                        CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($nodeinfo.PullServerName)").Thumbprint
+                        CertificateID = (Get-ChildItem Cert:\LocalMachine\My | ? Subject -EQ "CN=$($env:COMPUTERNAME)_enc").Thumbprint
                         ConfigurationModeFrequencyMins = 30
                         ConfigurationMode = 'ApplyAndAutoCorrect'
                         RebootNodeIfNeeded = 'True'
@@ -106,6 +159,7 @@ function Set-LCM {
 "@ | Invoke-Expression -Verbose
 }
 
+
 function Set-Pull {
     try{
         Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
@@ -114,6 +168,7 @@ function Set-Pull {
         Write-Verbose "Error in rsPullServer $($_.Exception.message)"
     }
 }
+
 
 Configuration Boot {
     param(
@@ -301,11 +356,11 @@ Configuration Boot {
                     Remove-Item
                     $store = Get-Item Cert:\LocalMachine\Root
                     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
                     $store.Close()
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
                     {return $true}
                     else 
                     {return $false}
@@ -324,18 +379,18 @@ Configuration Boot {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
                     $cN = 'CN=' + $env:COMPUTERNAME + '_enc'
-                    Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
-                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss root, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
+                    Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $cN} | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
+                    & makecert.exe -b $yesterday -r -pe -n $cN -sky exchange, -ss My, -sr localmachine, -len 2048, -eku 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
                 }
                 TestScript = {
-                    if( (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
+                    if( (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')} ))
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=' + $env:COMPUTERNAME + '_enc')}
                         ).Thumbprint
                     }
                 }
@@ -424,7 +479,7 @@ Configuration Boot {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
-                    $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
+                    $publicCert = ((Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
                         'uuid' = $($nodeinfo.uuid)
                         'dsc_config' = $($nodeinfo.dsc_config)
@@ -459,19 +514,32 @@ Configuration Boot {
         }
     } 
 }
+
+
 Create-BootTask
+if($PullServerAddress){
+    Get-PullServerInfo
+}
+
 Create-Secrets
+
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
+
 Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
-Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+
+Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
+
 Set-LCM
-if( !($PullServerIP) ){
+
+if(!($PullServerAddress)){
     Set-rsPlatform
     Set-Pull
 }
+
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
+
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
