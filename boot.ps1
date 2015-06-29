@@ -1,46 +1,54 @@
 ﻿param (
     [String] $defaultPath  = 'C:\DevOps',
+    [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
     [String] $PullServerAddress,
     [String] $dsc_config,
     [String] $shared_key,
     [int] $PullServerPort = '8080',
-    [Hashtable] $secrets)
+    [Hashtable] $secrets
+    )
 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
-[Environment]::SetEnvironmentVariable('nodeInfoPath','C:\Windows\Temp\nodeinfo.json','Machine')
+[Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 $global:PSBoundParameters = $PSBoundParameters
 
+
 function Get-PullServerInfo{
-    
 
-    $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
+    if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
+        $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
 
-    $PullServerValidIPs = @()
+        $PullServerValidIPs = @()
 
-    foreach($IP in $PullServerPossibleIP){
+        foreach($IP in $PullServerPossibleIP){
 
-        $check =  Test-NetConnection $IP -RemotePort $PullServerPort
+            $check =  Test-NetConnection $IP -Port $PullServerPort
 
-        if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+            if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+        }
+
+
+        if($PullServerValidIPs.values -contains 'Private Network'){
+            $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+        }
+        else{
+            $PullServerIP = $PullServerValidIPs.keys | Get-Random
+        }
+
     }
-
-
-    if($PullServerValidIPs.values -contains 'Private Network'){
-        $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
-    }
-    else{
-        $PullServerIP = $PullServerValidIPs.keys | Get-Random
-    }
+    else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
 
     $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
 
-    $uri = "https://google.com"
+    $uri = ("https://",$PullServerIP,":8080" -join '')
     $webRequest = [Net.WebRequest]::Create($uri)
     try { $webRequest.GetResponse() } catch {}
     $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
+    
+
 }
 
 
@@ -118,7 +126,7 @@ function Set-LCM {
                     {
                         AllowModuleOverwrite = 'True'
                         ConfigurationID = "$($nodeinfo.uuid)"
-                        CertificateID = (Get-ChildItem Cert:\LocalMachine\Root | ? Subject -EQ "CN=$($env:COMPUTERNAME)_enc").Thumbprint
+                        CertificateID = (Get-ChildItem Cert:\LocalMachine\My | ? Subject -EQ "CN=$($env:COMPUTERNAME)_enc").Thumbprint
                         ConfigurationModeFrequencyMins = 30
                         ConfigurationMode = 'ApplyAndAutoCorrect'
                         RebootNodeIfNeeded = 'True'
@@ -471,7 +479,7 @@ Configuration Boot {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
-                    $publicCert = ((Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
+                    $publicCert = ((Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                     $msgbody = @{'Name' = "$env:COMPUTERNAME"
                         'uuid' = $($nodeinfo.uuid)
                         'dsc_config' = $($nodeinfo.dsc_config)
@@ -509,19 +517,29 @@ Configuration Boot {
 
 
 Create-BootTask
-Get-PullServerInfo
+if($PullServerAddress){
+    Get-PullServerInfo
+}
+
 Create-Secrets
+
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
-Boot -PullServerIP $PullServerI -OutputPath 'C:\Windows\Temp' -Verbose
-Start-DscConfiguration -Wait -Force -Verbose -Path 'C:\Windows\Temp'
+
+Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
+
+Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
+
 Set-LCM
-if( !($PullServerAddress) ){
+
+if(!($PullServerAddress)){
     Set-rsPlatform
     Set-Pull
 }
+
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
+
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
