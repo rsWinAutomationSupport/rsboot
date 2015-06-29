@@ -62,6 +62,8 @@ function Create-Secrets {
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         $global:PSBoundParameters.Add('PullServerName',$PullServerName)
+        $global:PSBoundParameters.Add('PullServerIP',$PullServerIP)
+    
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
@@ -403,7 +405,7 @@ Configuration Boot {
             Script GetPullPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    $uri = "https://",$($nodeinfo.PullServerIP),":",$($nodeinfo.PullServerPort) -join ''
                     do {
                         $rerun = $true
                         try {
