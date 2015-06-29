@@ -15,36 +15,55 @@ $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
 
+    #If PullServerAddress is a name, resolve the name and test each IP it resolves to. If there are multiple successful IPs, it will choose Private routes first
+
     if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
-        $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
+        
+        do{
+                $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
 
-        $PullServerValidIPs = @()
+                $PullServerValidIPs = @()
 
-        foreach($IP in $PullServerPossibleIP){
+                foreach($IP in $PullServerPossibleIP){
 
-            $check =  Test-NetConnection $IP -Port $PullServerPort
+                    $check =  Test-NetConnection $IP -Port $PullServerPort
 
-            if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
-        }
+                    if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+                }
 
 
-        if($PullServerValidIPs.values -contains 'Private Network'){
-            $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
-        }
-        else{
-            $PullServerIP = $PullServerValidIPs.keys | Get-Random
-        }
-
+                if($PullServerValidIPs.values -contains 'Private Network'){
+                    $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+                }
+                else{
+                    $PullServerIP = $PullServerValidIPs.keys | Get-Random
+                }
+        }while(!($PullServerValidIPs))
     }
+
+    #If PullServerAddress contains only IPs, set the variable to the IP entered
     else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
 
     $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
 
+
+    #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
+   
     $uri = ("https://",$PullServerIP,":8080" -join '')
     $webRequest = [Net.WebRequest]::Create($uri)
-    try { $webRequest.GetResponse() } catch {}
-    $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+    
+    do {
+            $rerun = $true
+            try {
+                    $webRequest.GetResponse()
+                    $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+                }
+            catch {Write-Verbose "Error obtaining certificate CN, retrying."}
+            
+
+        }
+        while(!($PullServerName))
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
     
