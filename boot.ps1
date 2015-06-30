@@ -15,9 +15,8 @@ $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
 
-    #If PullServerAddress is a name, resolve the name and test each IP it resolves to. If there are multiple successful IPs, it will choose Private routes first
 
-    if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
+    if($PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
         
         do{
                 $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
@@ -43,25 +42,26 @@ function Get-PullServerInfo{
     }
 
     #If PullServerAddress contains only IPs, set the variable to the IP entered
-    else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
+    else{
+            $PullServerIP = $global:PSBoundParameters.PullServerAddress
+        }
 
     $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
 
+    
 
     #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
    
     $uri = ("https://",$PullServerIP,":8080" -join '')
     $webRequest = [Net.WebRequest]::Create($uri)
     
-    do {
-            $rerun = $true
-            try {
-                    $webRequest.GetResponse()
-                    $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
-                }
-            catch {Write-Verbose "Error obtaining certificate CN, retrying."}
+    
+     do{
             
-
+            try {$webRequest.GetResponse()}catch {}
+            
+            $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+            
         }
         while(!($PullServerName))
 
@@ -538,11 +538,14 @@ Configuration Boot {
 
 
 Create-BootTask
+
 if($PullServerAddress){
     Get-PullServerInfo
 }
 
+
 Create-Secrets
+
 
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
