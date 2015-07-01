@@ -527,6 +527,7 @@ Configuration Boot {
                         'dsc_config' = $($nodeinfo.dsc_config)
                         'shared_key' = $($nodeinfo.shared_key)
                         'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
+                        'NetworkAdapters' = $($nodeinfo.NetworkAdapters)
                     } | ConvertTo-Json
                     do {
                         try {
@@ -563,6 +564,8 @@ Create-BootTask
 if($PullServerAddress){
     Get-PullServerInfo
 }
+
+Get-NICInfo
 
 
 Create-Secrets
