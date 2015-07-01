@@ -82,8 +82,10 @@ function Get-NICInfo{
     foreach($NIC in $interfaces){
 
             $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
-    
-            $Hash = @{"IPv4" = $IPv4}
+            $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
+
+            $Hash = @{"IPv4" = $IPv4;
+                      "IPv6" = $IPv6}
     
             $network_adapters.Add($NIC,$Hash)
 
