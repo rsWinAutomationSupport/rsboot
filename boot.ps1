@@ -73,6 +73,24 @@ function Get-PullServerInfo{
 
 
 
+function Get-NICInfo{
+
+    $network_adapters =  @{}
+
+    $Interfaces = Get-NetAdapter | Select -ExpandProperty ifAlias
+
+    foreach($NIC in $interfaces){
+
+            $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
+    
+            $Hash = @{"IPv4" = $IPv4}
+    
+            $network_adapters.Add($NIC,$Hash)
+
+    }
+
+    $network_adapters | Set-Variable -Name NICInfo -Scope Global
+}
 
 
 function Create-Secrets {
@@ -82,6 +100,7 @@ function Create-Secrets {
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         $global:PSBoundParameters.Add('PullServerName',$PullServerName)
         $global:PSBoundParameters.Add('PullServerIP',$PullServerIP)
+        $global:PSBoundParameters.Add('NetworkAdapters',$NICInfo)
     
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
