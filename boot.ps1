@@ -15,36 +15,55 @@ $global:PSBoundParameters = $PSBoundParameters
 
 function Get-PullServerInfo{
 
-    if($global:PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
-        $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
+
+    if($PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
+        
+        do{
+                $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
 
 
-        $PullServerValidIPs = @()
+                $PullServerValidIPs = @()
 
-        foreach($IP in $PullServerPossibleIP){
+                foreach($IP in $PullServerPossibleIP){
 
-            $check =  Test-NetConnection $IP -Port $PullServerPort
+                    $check =  Test-NetConnection $IP -Port $PullServerPort
 
-            if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
-        }
+                    if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
+                }
 
 
-        if($PullServerValidIPs.values -contains 'Private Network'){
-            $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
-        }
-        else{
-            $PullServerIP = $PullServerValidIPs.keys | Get-Random
-        }
-
+                if($PullServerValidIPs.values -contains 'Private Network'){
+                    $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
+                }
+                else{
+                    $PullServerIP = $PullServerValidIPs.keys | Get-Random
+                }
+        }while(!($PullServerValidIPs))
     }
-    else{$PullServerIP = $global:PSBoundParameters.PullServerAddress}
+
+    #If PullServerAddress contains only IPs, set the variable to the IP entered
+    else{
+            $PullServerIP = $global:PSBoundParameters.PullServerAddress
+        }
 
     $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
 
+    
+
+    #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
+   
     $uri = ("https://",$PullServerIP,":8080" -join '')
     $webRequest = [Net.WebRequest]::Create($uri)
-    try { $webRequest.GetResponse() } catch {}
-    $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+    
+    
+     do{
+            
+            try {$webRequest.GetResponse()}catch {}
+            
+            $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+            
+        }
+        while(!($PullServerName))
 
     $PullServerName | Set-Variable -Name PullServerName -Scope Global
     
@@ -54,6 +73,26 @@ function Get-PullServerInfo{
 
 
 
+function Get-NICInfo{
+
+    $network_adapters =  @{}
+
+    $Interfaces = Get-NetAdapter | Select -ExpandProperty ifAlias
+
+    foreach($NIC in $interfaces){
+
+            $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
+            $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
+
+            $Hash = @{"IPv4" = $IPv4;
+                      "IPv6" = $IPv6}
+    
+            $network_adapters.Add($NIC,$Hash)
+
+    }
+
+    $network_adapters | Set-Variable -Name NICInfo -Scope Global
+}
 
 
 function Create-Secrets {
@@ -63,6 +102,7 @@ function Create-Secrets {
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         $global:PSBoundParameters.Add('PullServerName',$PullServerName)
         $global:PSBoundParameters.Add('PullServerIP',$PullServerIP)
+        $global:PSBoundParameters.Add('NetworkAdapters',$NICInfo)
     
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
@@ -358,11 +398,11 @@ Configuration Boot {
                     Remove-Item
                     $store = Get-Item Cert:\LocalMachine\Root
                     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\Root | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
                     $store.Close()
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
                     {return $true}
                     else 
                     {return $false}
@@ -487,6 +527,7 @@ Configuration Boot {
                         'dsc_config' = $($nodeinfo.dsc_config)
                         'shared_key' = $($nodeinfo.shared_key)
                         'PublicCert' = "$([System.Convert]::ToBase64String($publicCert))"
+                        'NetworkAdapters' = $($nodeinfo.NetworkAdapters)
                     } | ConvertTo-Json
                     do {
                         try {
@@ -519,11 +560,16 @@ Configuration Boot {
 
 
 Create-BootTask
+
 if($PullServerAddress){
     Get-PullServerInfo
 }
 
+Get-NICInfo
+
+
 Create-Secrets
+
 
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
