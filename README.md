@@ -1,5 +1,12 @@
 BootStrap
 ========
+Testing updates to DSC Platform
+
+Change from using PullServerIP and PullServerName to just PullServerAddress.
+
+Add NIC info to MSMQ message / node data.
+
+
 Server
 ```PoSh
 Invoke-WebRequest 'https://raw.githubusercontent.com/rsWinAutomationSupport/rsboot/wmf4/boot.ps1' -OutFile 'boot.ps1'
@@ -8,5 +15,5 @@ Invoke-WebRequest 'https://raw.githubusercontent.com/rsWinAutomationSupport/rsbo
 Client
 ```PoSh
 Invoke-WebRequest 'https://raw.githubusercontent.com/rsWinAutomationSupport/rsboot/wmf4/boot.ps1' -OutFile 'boot.ps1'
-.\boot.ps1 -PullServerName 'PullServer' -PullServerIP '' -dsc_config 'Client.ps1' -shared_key ''
+.\boot.ps1 -PullServerAddress 'pullserver' -dsc_config 'Client.ps1' -shared_key ''
 ```
