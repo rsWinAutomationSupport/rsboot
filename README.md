@@ -1,6 +1,7 @@
 BootStrap
 ========
-Testing updates to DSC Platform
+
+Release Notes:
 
 Change from using PullServerIP and PullServerName to just PullServerAddress.
 
