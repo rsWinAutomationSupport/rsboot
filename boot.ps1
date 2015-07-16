@@ -18,6 +18,7 @@
 $global:PSBoundParameters = $PSBoundParameters
 
 
+
 #For DSC Clients, takes $PullServerAddress and sets PullServerIP and PullServerName variables
 #If PullServerAddress is an IP, PullServerName is derived from the CN on the PullServer endpoint certificate
 function Get-PullServerInfo{
@@ -53,7 +54,7 @@ param(
 
 
 
-
+#For DSC Clients, gets NIC Names and IPs to add to node metadata. Included in MSMQ message registering Client with PullServer
 function Get-NICInfo{
 
     $network_adapters =  @{}
@@ -76,8 +77,10 @@ function Get-NICInfo{
 }
 
 
+
+#Creates nodeinfo.json(clients) or secrets.json(pullserver) depending on role
 function Create-Secrets {
-    if($global:PSBoundParameters.ContainsKey('shared_key')){
+    if($global:PSBoundParameters.ContainsKey('dsc_config')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
@@ -102,6 +105,8 @@ function Create-Secrets {
 }
 
 
+
+#Creates scheduled task to resume bootstrap in case of reboot
 function Create-BootTask {
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
     if(!(Get-ScheduledTask -TaskName 'rsBoot' -ErrorAction SilentlyContinue)) {
@@ -115,6 +120,8 @@ function Create-BootTask {
 }
 
 
+
+#Pullserver - runs rsPlatform to ensure all modules in place prior to executin rsPullServer.ps1
 function Set-rsPlatform {
 @'
     Configuration initDSC {
@@ -133,6 +140,8 @@ function Set-rsPlatform {
 }
 
 
+
+#Sets LCM configuration for Client or PullServer
 function Set-LCM {
 @"
     Configuration LCM
