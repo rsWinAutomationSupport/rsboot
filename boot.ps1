@@ -4,70 +4,51 @@
     [String] $PullServerAddress,
     [String] $dsc_config,
     [String] $shared_key,
-    [int] $PullServerPort = '8080',
+    [int] $PullServerPort = 8080,
     [Hashtable] $secrets
     )
+
+
+#Sets environment variables used throughout configuration
+#defaultPath - The path to folder containing PullServer and Node configuration .ps1 files
+#nodeInfoPath - The path to json file where node metadata will be recorded
 
 [Environment]::SetEnvironmentVariable('defaultPath',$defaultPath,'Machine')
 [Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 $global:PSBoundParameters = $PSBoundParameters
 
 
+#For DSC Clients, takes $PullServerAddress and sets PullServerIP and PullServerName variables
+#If PullServerAddress is an IP, PullServerName is derived from the CN on the PullServer endpoint certificate
 function Get-PullServerInfo{
+param(
+[string]$PullServerAddress,
+[int]$PullServerPort
+)
 
-
-    if($PSBoundParameters.PullServerAddress -match '[a-zA-Z]'){
+    if($PullServerAddress -match '[a-zA-Z]'){ $PullServerAddress | Set-Variable -Name PullServerName -Scope Global }
         
-        do{
-                $PullServerPossibleIP = Resolve-DnsName -Name $global:PSBoundParameters.PullServerAddress | Where {$_.IP4Address} | Select-Object -ExpandProperty IP4Address
-
-
-                $PullServerValidIPs = @()
-
-                foreach($IP in $PullServerPossibleIP){
-
-                    $check =  Test-NetConnection $IP -Port $PullServerPort
-
-                    if($check.TcpTestSucceeded){$PullServerValidIPs += @{$IP = $check.NetworkIsolationContext}}
-                }
-
-
-                if($PullServerValidIPs.values -contains 'Private Network'){
-                    $PullServerIP = ($PullServerValidIPs | Where {$_.values -contains 'Private Network'}).keys | Get-Random
-                }
-                else{
-                    $PullServerIP = $PullServerValidIPs.keys | Get-Random
-                }
-        }while(!($PullServerValidIPs))
-    }
-
-    #If PullServerAddress contains only IPs, set the variable to the IP entered
+        
     else{
-            $PullServerIP = $global:PSBoundParameters.PullServerAddress
-        }
-
-    $PullServerIP | Set-Variable -Name PullServerIP -Scope Global
-
     
-
-    #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
-   
-    $uri = ("https://",$PullServerIP,":8080" -join '')
-    $webRequest = [Net.WebRequest]::Create($uri)
+        $PullServerAddress | Set-Variable -Name PullServerIP -Scope Global
+    
+        #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
+        $uri = ("https://",$PullServerAddress,":",$PullServerPort -join '')
+        $webRequest = [Net.WebRequest]::Create($uri)
     
     
-     do{
+         do{
             
-            try {$webRequest.GetResponse()}catch {}
+                try {$webRequest.GetResponse()}catch {}
             
-            $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+                $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
             
-        }
-        while(!($PullServerName))
+            }
+            while(!($PullServerName))
 
-    $PullServerName | Set-Variable -Name PullServerName -Scope Global
-    
-
+        $PullServerName | Set-Variable -Name PullServerName -Scope Global
+    }
 }
 
 
@@ -99,11 +80,6 @@ function Create-Secrets {
     if($global:PSBoundParameters.ContainsKey('shared_key')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
-        $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
-        $global:PSBoundParameters.Add('PullServerName',$PullServerName)
-        $global:PSBoundParameters.Add('PullServerIP',$PullServerIP)
-        $global:PSBoundParameters.Add('NetworkAdapters',$NICInfo)
-    
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
     if($global:PSBoundParameters.ContainsKey('secrets')){
@@ -212,9 +188,11 @@ function Set-Pull {
 }
 
 
+
+#Initial DSC configuration to bootstrap
 Configuration Boot {
     param(
-        [String] $PullServerIP
+        [String] $PullServerAddress
     )
     node $env:COMPUTERNAME {
         File DevOpsDir{
@@ -269,7 +247,7 @@ Configuration Boot {
             DependsOn = '[Script]GetWMF4'
         }
 
-        if(!($PullServerIP)){
+        if($global:PSBoundParameters.ContainsKey('secrets')){
 
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
@@ -361,27 +339,34 @@ Configuration Boot {
                 }
                 DependsOn = '[File]rsPlatformDir'
             }
+
+
+
+            #Creates PullServer Certificate that resides on DSC endpoint
             Script CreateServerCertificate {
                 SetScript = {
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
                     Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')} |
                     Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $env:COMPUTERNAME -join ''), -sky exchange, -ss my, -sr localmachine, -len 2048
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $PullServerAddress -join ''), -sky exchange, -ss my, -sr localmachine, -len 2048
                 }
                 TestScript = {
-                    if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} ) 
+                    if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')} ) 
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint
                     }
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
+            
+            
+
             WindowsFeature IIS {
                 Ensure = 'Present'
                 Name = 'Web-Server'
@@ -502,13 +487,15 @@ Configuration Boot {
             }
             Script SetHostFile {
                 SetScript = {
+                    
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
                     $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
                     $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
                     Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
                 }
                 TestScript = {
-                    return $false
+                    if($global:PSBoundParameters.skipHOSTS -ne $true){ return $false }
+                    else { return $true }
                 }
                 GetScript = {
                     return @{
@@ -567,21 +554,19 @@ if($PullServerAddress){
 
 Get-NICInfo
 
-
 Create-Secrets
-
 
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
 
-Boot -PullServerIP $PullServerIP -OutputPath 'C:\Windows\Temp' -Verbose
+Boot -PullServerAddress $PullServerAddress -OutputPath 'C:\Windows\Temp' -Verbose
 
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
 Set-LCM
 
-if(!($PullServerAddress)){
+if($secrets){
     Set-rsPlatform
     Set-Pull
 }
