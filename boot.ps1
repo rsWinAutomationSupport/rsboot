@@ -1,13 +1,17 @@
 ﻿param (
+    [CmdletBinding]
     [String] $defaultPath  = 'C:\DevOps',
     [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
     [String] $PullServerAddress,
     [String] $dsc_config,
+    [String] $pullserver_config = 'rsPullServer.ps1',
     [String] $shared_key,
     [int] $PullServerPort = 8080,
     [Hashtable] $secrets
     )
 
+
+Start-Transcript -Path ("C:\Windows\Temp\dsc_bootstrap_",(Get-Date -Format M_dd_yyyy_h_m_s).ToString(),".txt" -join '') -Force
 
 #Sets environment variables used throughout configuration
 #defaultPath - The path to folder containing PullServer and Node configuration .ps1 files
@@ -50,6 +54,7 @@ param(
 
         $PullServerName | Set-Variable -Name PullServerName -Scope Global
     }
+
 }
 
 
@@ -121,7 +126,7 @@ function Create-BootTask {
 
 
 
-#Pullserver - runs rsPlatform to ensure all modules in place prior to executin rsPullServer.ps1
+#Pullserver - runs rsPlatform to ensure all modules in place prior to execute in rsPullServer.ps1
 function Set-rsPlatform {
 @'
     Configuration initDSC {
@@ -188,8 +193,12 @@ function Set-LCM {
 
 
 function Set-Pull {
+param
+(
+$pullserver_config
+)
     try{
-        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, 'rsPullServer.ps1' -join '\')) -Verbose
+        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, $pullserver_config -join '\')) -Verbose
     }
     catch {
         Write-Verbose "Error in rsPullServer $($_.Exception.message)"
@@ -203,6 +212,7 @@ Configuration Boot {
     param(
         [String] $PullServerAddress
     )
+
     node $env:COMPUTERNAME {
         File DevOpsDir{
             DestinationPath = [Environment]::GetEnvironmentVariable('defaultPath','Machine')
@@ -256,6 +266,9 @@ Configuration Boot {
             DependsOn = '[Script]GetWMF4'
         }
 
+        ########################################
+        ####BEGIN PULLSERVER-SPECIFIC CONFIG####
+        ########################################
         if($global:PSBoundParameters.ContainsKey('secrets')){
 
             Package InstallGit {
@@ -388,27 +401,30 @@ Configuration Boot {
             Script InstallRootCertificate {
                 SetScript = {
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')} |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')} |
                     Remove-Item
                     $store = Get-Item Cert:\LocalMachine\Root
                     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$env:COMPUTERNAME").RawData)) )
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$PullServerAddress").RawData)) )
                     $store.Close()
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint) 
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint) 
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $env:COMPUTERNAME -join '')}).Thumbprint
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint
                     }
                 }
                 DependsOn = '[Script]CreateServerCertificate'
             }
         }
+        ########################################
+        #####END PULLSERVER-SPECIFIC CONFIG#####
+        ########################################
         else{
 
             Script CreateEncryptionCertificate {
@@ -439,7 +455,7 @@ Configuration Boot {
             Script GetPullPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                    $uri = "https://",$($nodeinfo.PullServerIP),":",$($nodeinfo.PullServerPort) -join ''
+                    $uri = "https://",$($nodeinfo.PullServerAddress),":",$($nodeinfo.PullServerPort) -join ''
                     do {
                         $rerun = $true
                         try {
@@ -463,7 +479,7 @@ Configuration Boot {
                 }
                 TestScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    $uri = "https://$($nodeinfo.PullServerAddress):$($nodeinfo.PullServerPort)"
                     do {
                         $rerun = $true
                         try {
@@ -484,7 +500,7 @@ Configuration Boot {
                 }
                 GetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                    $uri = "https://$($nodeinfo.PullServerIP):$($nodeinfo.PullServerPort)"
+                    $uri = "https://$($nodeinfo.PullServerAddress):$($nodeinfo.PullServerPort)"
                     $webRequest = [Net.WebRequest]::Create($uri)
                     try { $webRequest.GetResponse() } catch {}
                     $cert = $webRequest.ServicePoint.Certificate
@@ -494,25 +510,31 @@ Configuration Boot {
                 }
                 DependsOn = '[WindowsFeature]MSMQ'
             }
-            Script SetHostFile {
-                SetScript = {
+
+            ####If PullServerAddress was an IP, set a HOSTS entry to resolve PullServer hostname to IP
+            
+            if($PullServerAddress -notmatch '[a-zA-Z]'){
+                Script SetHostFile {
+                    SetScript = {
                     
-                    $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
-                    $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
-                    $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
-                    Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
-                }
-                TestScript = {
-                    if($global:PSBoundParameters.skipHOSTS -ne $true){ return $false }
-                    else { return $true }
-                }
-                GetScript = {
-                    return @{
-                        'Result' = $true
+                        $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
+                        $hostfile = (Get-Content -Path 'C:\Windows\system32\drivers\etc\hosts').where({$_ -notmatch $($nodeinfo.PullServerIP) -AND $_ -notmatch $($nodeinfo.PullServerName)})
+                        $hostfile += $( $($nodeinfo.PullServerIP)+ "`t`t" + $($nodeinfo.PullServerName))
+                        Set-Content -Path 'C:\Windows\System32\Drivers\etc\hosts' -Value $hostfile -Force
                     }
+                    TestScript = {
+                        if($global:PSBoundParameters.skipHOSTS -ne $true){ return $false }
+                        else { return $true }
+                    }
+                    GetScript = {
+                        return @{
+                            'Result' = $true
+                        }
+                    }
+                    DependsOn = '[WindowsFeature]MSMQ'
                 }
-                DependsOn = '[WindowsFeature]MSMQ'
             }
+
             Script SendClientPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -557,11 +579,17 @@ Configuration Boot {
 
 Create-BootTask
 
-if($PullServerAddress){
+
+#Client only
+if(!($secrets)){
     Get-PullServerInfo
+    Get-NICInfo
 }
 
-Get-NICInfo
+
+#PullServer - If no PullServerAddress passed in, set to hostname
+if($secrets){ if(!($PullServerAddress)){$PullServerAddress = $env:COMPUTERNAME }}
+
 
 Create-Secrets
 
@@ -569,19 +597,28 @@ if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").coun
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
 
+
 Boot -PullServerAddress $PullServerAddress -OutputPath 'C:\Windows\Temp' -Verbose
+
 
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
 
+
 Set-LCM
 
+
+#PullServer - Run RsPlatform and then PullServer config file
 if($secrets){
     Set-rsPlatform
-    Set-Pull
+    Set-Pull $pullserver_config
 }
+
 
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
 
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
+
+
+Stop-Transcript
