@@ -85,6 +85,10 @@ function Get-NICInfo{
 
 #Creates nodeinfo.json(clients) or secrets.json(pullserver) depending on role
 function Create-Secrets {
+param(
+$PullServerAddress,
+$pullserver_config
+)
     if($global:PSBoundParameters.ContainsKey('dsc_config')){
         $global:PSBoundParameters.Remove('secrets')
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
@@ -97,6 +101,8 @@ function Create-Secrets {
                 Write-Verbose "$key key is missing from secrets parameter"
                 exit
             }
+            $secrets.Add('PullServerAddress',"$global:PSBoundParameters.PullServerAddress")
+            $secrets.Add('pullserver_config',"$global:PSBoundParameters.pullserver_config")
             if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
             Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
         }
@@ -591,7 +597,7 @@ if(!($secrets)){
 if($secrets){ if(!($PullServerAddress)){$PullServerAddress = $env:COMPUTERNAME }}
 
 
-Create-Secrets
+Create-Secrets -PullServerAddress $PullServerAddress -pullserver_config $pullserver_config
 
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
@@ -610,7 +616,7 @@ Set-LCM
 #PullServer - Run RsPlatform and then PullServer config file
 if($secrets){
     Set-rsPlatform
-    Set-Pull $pullserver_config
+    Set-Pull -pullserver_config $pullserver_config
 }
 
 
