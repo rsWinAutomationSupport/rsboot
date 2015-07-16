@@ -1,5 +1,5 @@
 ﻿param (
-    [CmdletBinding]
+
     [String] $defaultPath  = 'C:\DevOps',
     [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
     [String] $PullServerAddress,
@@ -101,11 +101,11 @@ $pullserver_config
                 Write-Verbose "$key key is missing from secrets parameter"
                 exit
             }
-            $secrets.Add('PullServerAddress',"$global:PSBoundParameters.PullServerAddress")
-            $secrets.Add('pullserver_config',"$global:PSBoundParameters.pullserver_config")
-            if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
-            Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
         }
+        $secrets.Add('PullServerAddress',"$PullServerAddress")
+        $secrets.Add('pullserver_config',"$pullserver_config")
+        if((Test-Path -Path $defaultPath ) -eq $false) {New-Item -Path $defaultPath -ItemType Directory -Force}
+        Set-Content -Path (Join-Path $defaultPath 'secrets.json') -Value $($secrets | ConvertTo-Json -Depth 2)
     }
     if( Test-Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) ) {
         Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json | Set-Variable -Name nodeinfo -Scope Global
@@ -199,12 +199,8 @@ function Set-LCM {
 
 
 function Set-Pull {
-param
-(
-$pullserver_config
-)
     try{
-        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, $pullserver_config -join '\')) -Verbose
+        Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, $global:d.pullserver_config -join '\')) -Verbose
     }
     catch {
         Write-Verbose "Error in rsPullServer $($_.Exception.message)"
@@ -214,11 +210,7 @@ $pullserver_config
 
 
 #Initial DSC configuration to bootstrap
-Configuration Boot {
-    param(
-        [String] $PullServerAddress
-    )
-
+Configuration Boot {  
     node $env:COMPUTERNAME {
         File DevOpsDir{
             DestinationPath = [Environment]::GetEnvironmentVariable('defaultPath','Machine')
@@ -275,7 +267,7 @@ Configuration Boot {
         ########################################
         ####BEGIN PULLSERVER-SPECIFIC CONFIG####
         ########################################
-        if($global:PSBoundParameters.ContainsKey('secrets')){
+        if($global:d){
 
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
@@ -373,21 +365,24 @@ Configuration Boot {
             #Creates PullServer Certificate that resides on DSC endpoint
             Script CreateServerCertificate {
                 SetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     $yesterday = (Get-Date).AddDays(-1) | Get-Date -Format MM/dd/yyyy
                     Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')} |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')} |
                     Remove-Item
-                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $PullServerAddress -join ''), -sky exchange, -ss my, -sr localmachine, -len 2048
+                    & makecert.exe -b $yesterday -r -pe -n $('CN=', $d.PullServerAddress -join ''), -sky exchange, -ss my, -sr localmachine, -len 2048
                 }
                 TestScript = {
-                    if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')} ) 
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')} ) 
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')}).Thumbprint
                     }
                 }
                 DependsOn = '[Script]GetMakeCert'
@@ -406,23 +401,26 @@ Configuration Boot {
             }
             Script InstallRootCertificate {
                 SetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')} |
+                    Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')} |
                     Remove-Item
                     $store = Get-Item Cert:\LocalMachine\Root
                     $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$PullServerAddress").RawData)) )
+                    $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | ? Subject -eq "CN=$d.PullServerAddress").RawData)) )
                     $store.Close()
                 }
                 TestScript = {
-                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint) 
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
+                    if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')}).Thumbprint) 
                     {return $true}
                     else 
                     {return $false}
                 }
                 GetScript = {
+                    $d = Get-Content $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) 'secrets.json') -Raw | ConvertFrom-Json
                     return @{
-                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $PullServerAddress -join '')}).Thumbprint
+                        'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq $('CN=', $d.PullServerAddress -join '')}).Thumbprint
                     }
                 }
                 DependsOn = '[Script]CreateServerCertificate'
