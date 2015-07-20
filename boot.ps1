@@ -574,7 +574,7 @@ Configuration Boot {
                         'Result' = $true
                     }
                 }
-                DependsOn = @('[WindowsFeature]MSMQ','[Script]SetHostFile')
+                DependsOn = @('[WindowsFeature]MSMQ')
             }                
         }
     } 
@@ -586,7 +586,7 @@ Create-BootTask
 
 #Client only
 if(!($secrets)){
-    Get-PullServerInfo
+    Get-PullServerInfo -PullServerAddress $PullServerAddress -PullServerPort $PullServerPort
     Get-NICInfo
 }
 
