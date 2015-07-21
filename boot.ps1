@@ -35,11 +35,11 @@ function Get-PullServerInfo{
         #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
         $uri = ("https://",$PullServerAddress,":",$PullServerPort -join '')
         $webRequest = [Net.WebRequest]::Create($uri)
-         do{
-                try {$webRequest.GetResponse()}catch {}
-                $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
-            }
-            while(!($PullServerName))
+        do{
+            try {$webRequest.GetResponse()}catch {}
+            $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+        }
+        while(!($PullServerName))
         $PullServerName | Set-Variable -Name PullServerName -Scope Global
     }
 }
@@ -48,11 +48,11 @@ function Get-NICInfo{
     $network_adapters =  @{}
     $Interfaces = Get-NetAdapter | Select -ExpandProperty ifAlias
     foreach($NIC in $interfaces){
-            $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
-            $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
-            $Hash = @{"IPv4" = $IPv4;
-                      "IPv6" = $IPv6}
-            $network_adapters.Add($NIC,$Hash)
+        $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
+        $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
+        $Hash = @{"IPv4" = $IPv4;
+                    "IPv6" = $IPv6}
+        $network_adapters.Add($NIC,$Hash)
     }
     $network_adapters | Set-Variable -Name NICInfo -Scope Global
 }
