@@ -1,5 +1,4 @@
 ﻿param (
-
     [String] $defaultPath  = 'C:\DevOps',
     [string] $NodeInfoPath = 'C:\Windows\Temp\nodeinfo.json',
     [String] $PullServerAddress,
@@ -9,7 +8,6 @@
     [int] $PullServerPort = 8080,
     [Hashtable] $secrets
     )
-
 
 Start-Transcript -Path ("C:\Windows\Temp\dsc_bootstrap_",(Get-Date -Format M_dd_yyyy_h_m_s).ToString(),".txt" -join '') -Force
 
@@ -21,76 +19,52 @@ Start-Transcript -Path ("C:\Windows\Temp\dsc_bootstrap_",(Get-Date -Format M_dd_
 [Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 $global:PSBoundParameters = $PSBoundParameters
 
-
-
 #For DSC Clients, takes $PullServerAddress and sets PullServerIP and PullServerName variables
 #If PullServerAddress is an IP, PullServerName is derived from the CN on the PullServer endpoint certificate
 function Get-PullServerInfo{
-param(
-[string]$PullServerAddress,
-[int]$PullServerPort
-)
+    param(
+    [string]$PullServerAddress,
+    [int]$PullServerPort
+    )
 
-    if($PullServerAddress -match '[a-zA-Z]'){ $PullServerAddress | Set-Variable -Name PullServerName -Scope Global }
-        
-        
+    if($PullServerAddress -match '[a-zA-Z]'){ 
+        $PullServerAddress | Set-Variable -Name PullServerName -Scope Global 
+    }
     else{
-    
         $PullServerAddress | Set-Variable -Name PullServerIP -Scope Global
-    
         #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
         $uri = ("https://",$PullServerAddress,":",$PullServerPort -join '')
         $webRequest = [Net.WebRequest]::Create($uri)
-    
-    
          do{
-            
                 try {$webRequest.GetResponse()}catch {}
-            
                 $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
-            
             }
             while(!($PullServerName))
-
         $PullServerName | Set-Variable -Name PullServerName -Scope Global
     }
-
 }
-
-
-
 #For DSC Clients, gets NIC Names and IPs to add to node metadata. Included in MSMQ message registering Client with PullServer
 function Get-NICInfo{
-
     $network_adapters =  @{}
-
     $Interfaces = Get-NetAdapter | Select -ExpandProperty ifAlias
-
     foreach($NIC in $interfaces){
-
             $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
             $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
-
             $Hash = @{"IPv4" = $IPv4;
                       "IPv6" = $IPv6}
-    
             $network_adapters.Add($NIC,$Hash)
-
     }
-
     $network_adapters | Set-Variable -Name NICInfo -Scope Global
 }
-
-
-
 #Creates nodeinfo.json(clients) or secrets.json(pullserver) depending on role
 function Create-Secrets {
-param(
-$PullServerAddress,
-$pullserver_config
-)
+    param(
+    $PullServerAddress,
+    $pullserver_config
+    )
     if($global:PSBoundParameters.ContainsKey('dsc_config')){
         $global:PSBoundParameters.Remove('secrets')
+        $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
     }
@@ -114,9 +88,6 @@ $pullserver_config
         Get-Content $(Join-Path $defaultPath 'secrets.json') -Raw | ConvertFrom-Json | Set-Variable -Name d -Scope Global
     }
 }
-
-
-
 #Creates scheduled task to resume bootstrap in case of reboot
 function Create-BootTask {
     foreach( $key in ($global:PSBoundParameters.Keys -notmatch 'secrets') ){$arguments += "-$key $($global:PSBoundParameters[$key]) "}
@@ -129,9 +100,6 @@ function Create-BootTask {
         Register-ScheduledTask rsBoot -InputObject $D
     }
 }
-
-
-
 #Pullserver - runs rsPlatform to ensure all modules in place prior to execute in rsPullServer.ps1
 function Set-rsPlatform {
 @'
@@ -149,9 +117,6 @@ function Set-rsPlatform {
     Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
 '@ | Invoke-Expression -Verbose
 }
-
-
-
 #Sets LCM configuration for Client or PullServer
 function Set-LCM {
 @"
@@ -197,7 +162,6 @@ function Set-LCM {
 "@ | Invoke-Expression -Verbose
 }
 
-
 function Set-Pull {
     try{
         Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, $global:d.pullserver_config -join '\')) -Verbose
@@ -206,8 +170,6 @@ function Set-Pull {
         Write-Verbose "Error in rsPullServer $($_.Exception.message)"
     }
 }
-
-
 
 #Initial DSC configuration to bootstrap
 Configuration Boot {  
@@ -268,7 +230,6 @@ Configuration Boot {
         ####BEGIN PULLSERVER-SPECIFIC CONFIG####
         ########################################
         if($global:d){
-
             Package InstallGit {
                 Name = 'Git version 1.9.5-preview20150319'
                 Path = 'http://raw.githubusercontent.com/rsWinAutomationSupport/Git/universal/Git-Windows-Latest.exe'
@@ -359,9 +320,6 @@ Configuration Boot {
                 }
                 DependsOn = '[File]rsPlatformDir'
             }
-
-
-
             #Creates PullServer Certificate that resides on DSC endpoint
             Script CreateServerCertificate {
                 SetScript = {
@@ -387,9 +345,6 @@ Configuration Boot {
                 }
                 DependsOn = '[Script]GetMakeCert'
             }
-            
-            
-
             WindowsFeature IIS {
                 Ensure = 'Present'
                 Name = 'Web-Server'
@@ -516,7 +471,6 @@ Configuration Boot {
             }
 
             ####If PullServerAddress was an IP, set a HOSTS entry to resolve PullServer hostname to IP
-            
             if($PullServerAddress -notmatch '[a-zA-Z]'){
                 Script SetHostFile {
                     SetScript = {
@@ -538,7 +492,6 @@ Configuration Boot {
                     DependsOn = '[WindowsFeature]MSMQ'
                 }
             }
-
             Script SendClientPublicCert {
                 SetScript = {
                     $nodeinfo = Get-Content ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').ToString()) -Raw | ConvertFrom-Json
@@ -556,11 +509,11 @@ Configuration Boot {
                             $msg = New-Object System.Messaging.Message
                             $msg.Label = 'execute'
                             $msg.Body = $msgbody
-                            $queueName = "FormatName:DIRECT=HTTPS://$($nodeinfo.PullServerName)/msmq/private$/rsdsc"
+                            $queueName = "FormatName:DIRECT=HTTPS://$($nodeinfo.PullServerAddress)/msmq/private$/rsdsc"
                             $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                             $queue.Send($msg)
                             Start-Sleep -Seconds 30
-                            $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
+                            $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerAddress):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
                         }
                         catch {
                             Write-Verbose "Error retrieving configuration $($_.Exception.message)"
@@ -574,7 +527,7 @@ Configuration Boot {
                         'Result' = $true
                     }
                 }
-                DependsOn = @('[WindowsFeature]MSMQ','[Script]SetHostFile')
+                DependsOn = @('[WindowsFeature]MSMQ')
             }                
         }
     } 
@@ -582,47 +535,29 @@ Configuration Boot {
 
 
 Create-BootTask
-
-
 #Client only
 if(!($secrets)){
-    Get-PullServerInfo
+    Get-PullServerInfo -PullServerAddress $PullServerAddress -PullServerPort $PullServerPort
     Get-NICInfo
 }
-
-
 #PullServer - If no PullServerAddress passed in, set to hostname
-if($secrets){ if(!($PullServerAddress)){$PullServerAddress = $env:COMPUTERNAME }}
-
-
+if($secrets){ if(!($PullServerAddress)){
+    $PullServerAddress = $env:COMPUTERNAME }
+}
 Create-Secrets -PullServerAddress $PullServerAddress -pullserver_config $pullserver_config
-
 if( (Get-ChildItem WSMan:\localhost\Listener | ? Keys -eq "Transport=HTTP").count -eq 0 ){
     New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="http"}
 }
-
-
 Boot -PullServerAddress $PullServerAddress -OutputPath 'C:\Windows\Temp' -Verbose
-
-
 Start-DscConfiguration -Force -Path 'C:\Windows\Temp' -Wait -Verbose
-
-
 Set-LCM
-
-
 #PullServer - Run RsPlatform and then PullServer config file
 if($secrets){
     Set-rsPlatform
     Set-Pull -pullserver_config $pullserver_config
 }
-
-
 else {
     Get-ScheduledTask -TaskName "Consistency" | Start-ScheduledTask
 }
-
 Unregister-ScheduledTask -TaskName rsBoot -Confirm:$false
-
-
 Stop-Transcript
