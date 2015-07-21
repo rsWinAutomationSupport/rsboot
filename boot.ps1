@@ -64,6 +64,8 @@ function Create-Secrets {
     )
     if($global:PSBoundParameters.ContainsKey('dsc_config')){
         $global:PSBoundParameters.Remove('secrets')
+        $global:PSBoundParameters.Add('PullServerIP',$global:PullServerIP)
+        $global:PSBoundParameters.Add('PullServerName',$global:PullServerName)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
@@ -509,7 +511,7 @@ Configuration Boot {
                             $msg = New-Object System.Messaging.Message
                             $msg.Label = 'execute'
                             $msg.Body = $msgbody
-                            $queueName = "FormatName:DIRECT=HTTPS://$($nodeinfo.PullServerAddress)/msmq/private$/rsdsc"
+                            $queueName = "FormatName:DIRECT=HTTPS://$($nodeinfo.PullServerName)/msmq/private$/rsdsc"
                             $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                             $queue.Send($msg)
                             Start-Sleep -Seconds 30
