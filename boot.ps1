@@ -34,12 +34,13 @@ function Get-PullServerInfo{
         $PullServerAddress | Set-Variable -Name PullServerIP -Scope Global
         #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
         $uri = ("https://",$PullServerAddress,":",$PullServerPort -join '')
-        $webRequest = [Net.WebRequest]::Create($uri)
-         do{
-                try {$webRequest.GetResponse()}catch {}
-                $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
-            }
-            while(!($PullServerName))
+        do{
+            $webRequest = [Net.WebRequest]::Create($uri)
+            try {$webRequest.GetResponse()}catch {}
+            $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+            if( ! ( $PullServerName ) ) { Start-Sleep -Seconds 10 }
+        }
+        while(!($PullServerName))
         $PullServerName | Set-Variable -Name PullServerName -Scope Global
     }
 }
@@ -48,11 +49,11 @@ function Get-NICInfo{
     $network_adapters =  @{}
     $Interfaces = Get-NetAdapter | Select -ExpandProperty ifAlias
     foreach($NIC in $interfaces){
-            $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
-            $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
-            $Hash = @{"IPv4" = $IPv4;
-                      "IPv6" = $IPv6}
-            $network_adapters.Add($NIC,$Hash)
+        $IPv4 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv4'} | Select -ExpandProperty IPAddress
+        $IPv6 = Get-NetIPAddress | Where-Object {$_.InterfaceAlias -eq $NIC -and $_.AddressFamily -eq 'IPv6'} | Select -ExpandProperty IPAddress
+        $Hash = @{"IPv4" = $IPv4;
+                    "IPv6" = $IPv6}
+        $network_adapters.Add($NIC,$Hash)
     }
     $network_adapters | Set-Variable -Name NICInfo -Scope Global
 }
@@ -64,6 +65,8 @@ function Create-Secrets {
     )
     if($global:PSBoundParameters.ContainsKey('dsc_config')){
         $global:PSBoundParameters.Remove('secrets')
+        $global:PSBoundParameters.Add('PullServerIP',$global:PullServerIP)
+        $global:PSBoundParameters.Add('PullServerName',$global:PullServerName)
         $global:PSBoundParameters.Add('PullServerPort',$PullServerPort)
         $global:PSBoundParameters.Add('uuid',[Guid]::NewGuid().Guid)
         Set-Content -Path ([Environment]::GetEnvironmentVariable('nodeInfoPath','Machine').toString()) -Value $($global:PSBoundParameters | ConvertTo-Json -Depth 2)
@@ -509,11 +512,11 @@ Configuration Boot {
                             $msg = New-Object System.Messaging.Message
                             $msg.Label = 'execute'
                             $msg.Body = $msgbody
-                            $queueName = "FormatName:DIRECT=HTTPS://$($nodeinfo.PullServerAddress)/msmq/private$/rsdsc"
+                            $queueName = "FormatName:DIRECT=HTTPS://$($nodeinfo.PullServerName)/msmq/private$/rsdsc"
                             $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
                             $queue.Send($msg)
                             Start-Sleep -Seconds 30
-                            $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerAddress):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
+                            $statusCode = (Invoke-WebRequest -Uri "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent" -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
                         }
                         catch {
                             Write-Verbose "Error retrieving configuration $($_.Exception.message)"
