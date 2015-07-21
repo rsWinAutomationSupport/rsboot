@@ -34,10 +34,11 @@ function Get-PullServerInfo{
         $PullServerAddress | Set-Variable -Name PullServerIP -Scope Global
         #Attempt to get the PullServer's hostname from the certificate attached to the endpoint. Will not proceed unless a CN name is found.
         $uri = ("https://",$PullServerAddress,":",$PullServerPort -join '')
-        $webRequest = [Net.WebRequest]::Create($uri)
         do{
+            $webRequest = [Net.WebRequest]::Create($uri)
             try {$webRequest.GetResponse()}catch {}
             $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+            if( ! ( $PullServerName ) ) { Start-Sleep -Seconds 10 }
         }
         while(!($PullServerName))
         $PullServerName | Set-Variable -Name PullServerName -Scope Global
