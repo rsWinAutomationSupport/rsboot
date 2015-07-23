@@ -538,10 +538,6 @@ Configuration Boot {
 
 
 Create-BootTask
-While (!(Test-Connection -computer 'github.com' -Count 1 -Quiet)) {
-    Write-Verbose "Connection down..."
-    Start-Sleep -Seconds 5
-}
 #Client only
 if(!($secrets)){
     Get-PullServerInfo -PullServerAddress $PullServerAddress -PullServerPort $PullServerPort
