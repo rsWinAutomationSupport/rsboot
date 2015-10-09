@@ -6,10 +6,14 @@
     [String] $pullserver_config = 'rsPullServer.ps1',
     [String] $shared_key,
     [int] $PullServerPort = 8080,
-    [Hashtable] $secrets
+    [Hashtable] $secrets,
+    [bool] $RCv2,
+    [bool] $RSCloud,
+    [int] $RSWaitTimeout = 1800
     )
 
-Start-Transcript -Path ("C:\Windows\Temp\dsc_bootstrap_",(Get-Date -Format M_dd_yyyy_h_m_s).ToString(),".txt" -join '') -Force
+$TimeDate = (Get-Date -Format M_dd_yyyy_h_m_s).ToString()
+Start-Transcript -Path "C:\Windows\Temp\dsc_bootstrap_$TimeDate.txt" -Force
 
 #Sets environment variables used throughout configuration
 #defaultPath - The path to folder containing PullServer and Node configuration .ps1 files
@@ -165,6 +169,61 @@ function Set-LCM {
 "@ | Invoke-Expression -Verbose
 }
 
+#region Rackspace-specific functions
+function Get-rsXenInfo 
+{
+    param([string] $value)
+    $CitrixXenStoreBase = gwmi -n root\wmi -cl CitrixXenStoreBase
+    $sid = $CitrixXenStoreBase.AddSession("MyNewSession")
+    $session = gwmi -n root\wmi -q "select * from CitrixXenStoreSession where SessionId=$($sid.SessionId)"
+    $data = $session.GetValue($value).value -replace "`"", ""
+    return $data
+}
+
+Function Wait-ForRSCloud
+{
+    [CmdletBinding()]
+    Param(
+        [int]$Timeout = 1800, # Default timeout set to about 30 minutes
+        [bool] $RCv2
+    )
+        
+    $AutomationComlete = $false
+    do 
+    {
+        Write-Verbose "Checking for rax_service_level_automation status..."
+        if ((Get-rsXenInfo -value "vm-data/user-metadata/rax_service_level_automation") -ne "Complete")
+        {
+            Write-Verbose "rax_service_level_automation has not yet completed"
+            $AutomationComlete = $false
+            Write-Verbose "Waiting for rax_service_level_automation for 60 seconds..."
+            Start-Sleep -Seconds 60
+            $Timeout = ($Timeout - 60)
+        }
+        else
+        {
+            $AutomationComlete = $true
+            Write-Verbose "rax_service_level_automation complete."
+        }
+    } 
+    while (($AutomationComlete -eq $false) -or ($Timeout -lt 0))
+    
+    if ($RCv2)
+    {
+        $RCv2Status = Get-rsXenInfo -value "vm-data/user-metadata/rackconnect_automation_status"
+        Write-Verbose "RackConnect status: $RCv2Status"
+    }
+
+    if (($automationComlete -eq $false) -and ($Timeout -lt 0))
+    {
+        Write-Verbose "Timed out while waiting for Rackspace Cloud Automation - some or all Rackspace cloud automation steps did not complete."
+    }
+    else
+    {
+        Write-Verbose "Rackspace Servie Automation wait has been completed"
+    }
+}
+#endregion
 function Set-Pull {
     try{
         Invoke-Expression $(Join-Path ([Environment]::GetEnvironmentVariable('defaultPath','Machine')) $($global:d.mR, $global:d.pullserver_config -join '\')) -Verbose
@@ -536,8 +595,17 @@ Configuration Boot {
     } 
 }
 
-
+################################################
+# Main script execution start
+#
 Create-BootTask
+# Add RS Cloud wait checks
+if ($RSCloud -or $RCv2)
+{
+    Wait-ForRSCloud -Timeout $RSWaitTimeout -RCv2 $RCv2
+}
+
+
 #Client only
 if(!($secrets)){
     Get-PullServerInfo -PullServerAddress $PullServerAddress -PullServerPort $PullServerPort
