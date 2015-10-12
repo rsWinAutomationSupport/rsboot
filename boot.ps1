@@ -7,8 +7,8 @@
     [String] $shared_key,
     [int] $PullServerPort = 8080,
     [Hashtable] $secrets,
-    [bool] $RCv2,
-    [bool] $RSCloud,
+    [switch] $RCv2,
+    [switch] $RSCloud,
     [int] $RSWaitTimeout = 1800
     )
 
@@ -220,7 +220,7 @@ Function Wait-ForRSCloud
     }
     else
     {
-        Write-Verbose "Rackspace Servie Automation wait has been completed"
+        Write-Verbose "Rackspace Service Automation wait has been completed"
     }
 }
 #endregion
@@ -609,7 +609,7 @@ if ($RSCloud -or $RCv2)
     {
         $Params.Add("RCv2",$RCv2)
     }
-    Wait-ForRSCloud $Params
+    Wait-ForRSCloud @Params
 }
 
 #Client only
