@@ -602,9 +602,15 @@ Create-BootTask
 # Add RS Cloud wait checks
 if ($RSCloud -or $RCv2)
 {
-    Wait-ForRSCloud -Timeout $RSWaitTimeout -RCv2 $RCv2
+    $Params = @{Verbose = $true
+                Timeout = $RSWaitTimeout
+               }
+    if ($RCv2)
+    {
+        $Params.Add("RCv2",$RCv2)
+    }
+    Wait-ForRSCloud $Params
 }
-
 
 #Client only
 if(!($secrets)){
