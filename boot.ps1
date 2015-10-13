@@ -9,7 +9,10 @@
     [Hashtable] $secrets,
     [switch] $RCv2,
     [switch] $RSCloud,
-    [int] $RSWaitTimeout = 1800
+    [int] $RSWaitTimeout = 1800,
+    [string] $rsSourcePackageManagerURL = "https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git",
+    [string] $rsSourcePackageManagerBranch = "v1.0.3",
+    [string] $GitClientURL = "https://github.com/git-for-windows/git/releases/download/v2.5.1.windows.1/Git-2.5.1-64-bit.exe"
     )
 
 $TimeDate = (Get-Date -Format M_dd_yyyy_h_m_s).ToString()
