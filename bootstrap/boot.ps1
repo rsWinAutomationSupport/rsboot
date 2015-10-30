@@ -357,18 +357,24 @@ Configuration PullBoot
     } 
 }
 
-Configuration InstallPlatformModules
+function Invoke-InstallPlatformModules 
 {
-    Import-DscResource -ModuleName rsPlatform
-    Node $env:COMPUTERNAME
+@'
+    Configuration InstallPlatformModules 
     {
-        rsPlatform Modules
+        Import-DscResource -ModuleName rsPlatform
+        Node $env:COMPUTERNAME
         {
-            Ensure = 'Present'
+            rsPlatform Modules
+            {
+                Ensure = 'Present'
+            }
         }
     }
+    InstallPlatformModules -OutputPath 'C:\Windows\Temp' -Verbose
+    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+'@ | Invoke-Expression -Verbose
 }
-
 
 #endregion
 
@@ -556,21 +562,9 @@ if ($PullServerConfig -ne $null)
     
     Write-Verbose "Set Pull Server LCM"
     Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
-    
-    Write-Verbose "Resetting DSC process to clear mopdule cache..."
-    # WMF4 workaround for resetting PowerShell module cache before installing rsPlatform
-    # See https://technet.microsoft.com/en-gb/library/dn249926.aspx
-    # 
-    # Find the process that is hosting the DSC engine
-    $dscProcessID = Get-WmiObject msft_providers | 
-    Where-Object {$_.provider -like 'dsccore'} | 
-    Select-Object -ExpandProperty HostProcessIdentifier 
-    # Stop the process
-    Get-Process -Id $dscProcessID | Stop-Process -Force
 
     Write-Verbose "Running DSC config to install extra DSC modules as defined in rsPlatform configuration"
-    InstallPlatformModules -OutputPath 'C:\Windows\Temp' -Verbose
-    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+    Invoke-InstallPlatformModules
 
     $PullServerDSCConfigPath = "$DefaultInstallPath\DSCAutomation\$($BootParameters.mR)\$PullServerConfig"
     Write-Verbose "Executing final Pull server DSC script from configuration repository"
