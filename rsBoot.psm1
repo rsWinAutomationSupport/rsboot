@@ -117,9 +117,14 @@ function Write-Secrets
     }
 
     Write-Verbose "Preparing secrets and exporting as json file"
+    # First remove any existing conflicting entries in case re-running bootstrap
+    $BootParameters.Remove("PullServerAddress")
+    $BootParameters.Remove("pullserver_config")
+
     # Add additional keys to the boot parameters, which were passed directly to the boot.ps1 script
     $BootParameters.Add("PullServerAddress","$PullServerAddress")
     $BootParameters.Add("pullserver_config","$pullserver_config")
+    
     # Remove redundant keys
     $BootParameters.Remove("PreBoot")
     
@@ -134,4 +139,3 @@ function Write-Secrets
     Write-Verbose "Writing secrets.json"
     Set-Content -Path $SecretsPath -Value $($BootParameters | ConvertTo-Json -Depth 4)
 }
-
