@@ -49,7 +49,10 @@ Configuration PullBoot
     param 
     (
         [hashtable] $BootParameters,
-        [string] $PullConfigInstallPath
+        [string] $PullConfigInstallPath,
+        [string] $GitPackageName = "Git version 2.6.2",
+        [string] $GitInstallDir  = "C:\Program Files\Git\",
+        [string] $GitSourceUrl   = "https://github.com/git-for-windows/git/releases/download/v2.6.2.windows.1/Git-2.6.2-64-bit.exe"
     )
     node $env:COMPUTERNAME 
     {
@@ -117,28 +120,30 @@ Configuration PullBoot
         }
         Package InstallGit 
         {
-            Name = 'Git version 2.6.2'
-            Path = 'https://github.com/git-for-windows/git/releases/download/v2.6.2.windows.1/Git-2.6.2-64-bit.exe'
-            ProductId = ''
-            Arguments = '/VERYSILENT /DIR "C:\Program Files\Git\"'
-            Ensure = 'Present'
+            Name      = $GitPackageName
+            Path      = $GitSourceUrl
+            ProductId = ""
+            Arguments = "/VERYSILENT /DIR $GitInstallDir"
+            Ensure    = 'Present'
         }
         Script SetGitPath
         {
             SetScript = {
-                if (-not(Test-Path "C:\Program Files\Git\bin"))
+                $GitBinPath = (Join-Path $using:GitInstallDir "bin")
+                Write-Verbose "Setting Git executable path to $GitBinPath"
+                if (-not(Test-Path $GitBinPath))
                 {
                     Throw "Git bin folder was not found - check that git client is actualy installed"
                 }
                 $currentPath = ([System.Environment]::GetEnvironmentVariable("Path","Machine")).Split(";")
-                if (-not($currentPath.Contains("C:\Program Files\Git\bin")))
+                if (-not($currentPath.Contains($GitBinPath)))
                 {
-                    $env:Path = $env:Path + ";C:\Program Files\Git\bin"
+                    $env:Path = $env:Path + ";$GitBinPath"
                     [Environment]::SetEnvironmentVariable( "Path", $env:Path, [System.EnvironmentVariableTarget]::Machine )
                 }
                 else
                 {
-                    Write-Verbose 'Global path variable already contains "C:\Program Files\Git\bin"'
+                    Write-Verbose "Global path variable already contains $GitBinPath"
                 }
             }
             TestScript = {
@@ -154,24 +159,30 @@ Configuration PullBoot
         Script UpdateGitConfig 
         {
             SetScript = {
+                # Ensure that current path variable is up-to-date
                 $env:path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+                
+                Write-Verbose "Configuring git client user name and e-mail settings"
                 Start-Process -Wait 'git.exe' -ArgumentList "config --system user.email $env:COMPUTERNAME@localhost.local"
                 Start-Process -Wait 'git.exe' -ArgumentList "config --system user.name $env:COMPUTERNAME"
             }
             TestScript = {
+                # Ensure that current path variable is up-to-date
                 $env:path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
                 $GitConfig = & git config --list
 
-                if( [bool]($GitConfig -match $env:COMPUTERNAME) )
+                if( [bool]($GitConfig -match "user.email=$env:COMPUTERNAME") -and [bool]($GitConfig -match "user.name=$env:COMPUTERNAME") )
                 {
                     return $true
                 }
                 else
                 {
+                    Write-Verbose "Git client user email and name are not set as required"
                     return $false
                 }
             }
             GetScript = {
+                # Ensure that current path variable is up-to-date
                 $env:path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
                 $GitConfig = & git config --list
                 @{"Result" = $($GitConfig -match $env:COMPUTERNAME)}
@@ -181,10 +192,13 @@ Configuration PullBoot
         Script Clone_rsConfigs 
         {
             SetScript = {
+                # Ensure that current path variable is up-to-date
                 $env:path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+                # doing this only to help code readability
                 $BootParams = $using:BootParameters
                 $gitArguments = "clone --branch $($BootParams.branch_rsConfigs) https://$($BootParams.git_Oauthtoken)@github.com/$($BootParams.git_username)/$($BootParams.mR).git"
                 Set-Location $using:PullConfigInstallPath -Verbose
+                Write-Verbose "Cloning DSC configuration repository"
                 Start-Process -Wait 'git.exe' -ArgumentList $gitArguments
             }
             TestScript = {
@@ -206,20 +220,23 @@ Configuration PullBoot
         }
         File rsPlatformDir 
         {
-            SourcePath = (Join-Path $PullConfigInstallPath "$($BootParameters.mR)\rsPlatform")
+            SourcePath      = (Join-Path $PullConfigInstallPath "$($BootParameters.mR)\rsPlatform")
             DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
-            Type = 'Directory'
-            Recurse = $true
-            MatchSource = $true
-            Ensure = 'Present'
-            DependsOn = '[Script]Clone_rsConfigs'
+            Type            = 'Directory'
+            Recurse         = $true
+            MatchSource     = $true
+            Ensure          = 'Present'
+            DependsOn       = '[Script]Clone_rsConfigs'
         }
         Script ClonersPackageSourceManager 
         {
             SetScript = {
+                # Ensure that current path variable is up-to-date
                 $env:path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+                # doing this only to help code readability
                 $BootParams = $using:BootParameters
                 Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
+                Write-Verbose "Cloning the rsPackageSourceManager module"
                 Start-Process -Wait 'git.exe' -ArgumentList "clone --branch $($BootParams.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
             }
             TestScript = {
@@ -234,19 +251,25 @@ Configuration PullBoot
         Script CreateServerCertificate 
         {
             SetScript = {
-                $BootParams = $using:BootParameters
+                $PullServerAddress = $using:BootParameters.PullServerAddress
                 Import-Module -Name rsBoot -Force
 
                 Get-ChildItem -Path Cert:\LocalMachine\My\ |
-                Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"} | 
+                Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"} | 
                 Remove-Item
                 
                 $EndDate = (Get-Date).AddYears(25) | Get-Date -Format MM/dd/yyyy
-                New-SelfSignedCertificateEx -Subject "CN=$($BootParams.PullServerAddress)" -NotAfter $EndDate -StoreLocation LocalMachine -StoreName My -Exportable -KeyLength 2048
+                New-SelfSignedCertificateEx -Subject "CN=$PullServerAddress" `
+                                            -NotAfter $EndDate `
+                                            -StoreLocation LocalMachine `
+                                            -StoreName My `
+                                            -Exportable `
+                                            -KeyLength 2048
             }
             TestScript = {
-                $BootParams = $using:BootParameters
-                if( Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"} ) 
+                $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( Get-ChildItem -Path Cert:\LocalMachine\My\ | 
+                    Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"} ) 
                 {
                     return $true
                 }
@@ -256,9 +279,10 @@ Configuration PullBoot
                 }
             }
             GetScript = {
-                $BootParams = $using:BootParameters
+                $PullServerAddress = $using:BootParameters.PullServerAddress
                 return @{
-                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"}).Thumbprint
+                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | 
+                                Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
                 }
             }
         }
@@ -273,33 +297,50 @@ Configuration PullBoot
             Name = 'DSC-Service'
             DependsOn = '[WindowsFeature]IIS'
         }
+        # Copy the self-signed certificate from 'My' to the root store for system to trust it
         Script InstallRootCertificate 
         {
             SetScript = {
-                $BootParams = $using:BootParameters
+                $PullServerAddress = $using:BootParameters.PullServerAddress
+                
+                # Remove any existing certificates that may cause a conflict
                 Get-ChildItem -Path Cert:\LocalMachine\Root\ |
-                Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"} |
+                Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"} |
                 Remove-Item
+                
+                # Open the root store and add our self-signed cert to it
                 $store = Get-Item Cert:\LocalMachine\Root
                 $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
-                $store.Add( $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq "CN=$($BootParams.PullServerAddress)").RawData)) )
+                $CertificateObject = $(New-Object System.Security.Cryptography.X509Certificates.X509Certificate `
+                                        -ArgumentList @(,(Get-ChildItem Cert:\LocalMachine\My | 
+                                                          Where-Object Subject -eq "CN=$PullServerAddress").RawData))
+                $store.Add($CertificateObject)
                 $store.Close()
             }
             TestScript = {
-                $BootParams = $using:BootParameters
-                if((Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"}).Thumbprint -eq (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"}).Thumbprint) 
+                $PullServerAddress = $using:BootParameters.PullServerAddress
+
+                Write-Verbose "Comparing certificatates in System personal store and in 'Root'"
+                $SystemCert = (Get-ChildItem -Path Cert:\LocalMachine\My\ | 
+                               Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
+                $RootCert = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | 
+                             Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
+
+                if($RootCert -eq $SystemCert) 
                 {
                     return $true
                 }
                 else 
                 {
+                    Write-Verbose "Certificates do not match"
                     return $false
                 }
             }
             GetScript = {
-                $BootParams = $using:BootParameters
+                $PullServerAddress = $using:BootParameters.PullServerAddress
                 return @{
-                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | Where-Object -FilterScript {$_.Subject -eq "CN=$($BootParams.PullServerAddress)"}).Thumbprint
+                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | 
+                                Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
                 }
             }
             DependsOn = '[Script]CreateServerCertificate'
@@ -413,7 +454,7 @@ foreach( $key in ($PSBoundParameters.Keys -notmatch 'BootParameters') )
 }
 if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
 {
-    Write-Verbose "Removing an existing 'DSCBoot' task..."
+    Write-Verbose "Removing existing 'DSCBoot' task..."
     Unregister-ScheduledTask -TaskName DSCBoot -Confirm:$false
 }
 $Action = New-ScheduledTaskAction –Execute "PowerShell.exe" -Argument "-ExecutionPolicy Bypass -file $PSCommandPath $arguments"
@@ -493,8 +534,6 @@ $DSCbootMofFolder = (Join-Path $DefaultInstallPath -ChildPath DSCboot)
 if ($PullServerConfig -ne $null)
 {
     Write-Verbose "Initiating DSC Pull Server bootstrap..."
-
-    # Default to using local hostname if it was not provided
     if(!($PullServerAddress))
     {
         $PullServerAddress = $env:COMPUTERNAME
@@ -579,5 +618,3 @@ if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
     Unregister-ScheduledTask -TaskName DSCBoot -Confirm:$false
 }
 Stop-Transcript
-
-
