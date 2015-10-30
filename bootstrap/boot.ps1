@@ -19,10 +19,10 @@ Param
 (
     # defaultPath - Main installation directory (Default: <system_drive>:\Program Files\DSCAutomation)
     #               Will also contain the configuration repository
-    [string] $DefaultPath = (Join-Path $env:ProgramFiles -ChildPath DSCAutomation),
+    [string] $DefaultInstallPath = (Join-Path $env:ProgramFiles -ChildPath DSCAutomation),
 
     # NodeInfoPath - The path to json file where node metadata will be recorded
-    [string] $NodeInfoPath = (Join-Path $defaultPath -ChildPath nodeinfo.json),
+    [string] $NodeInfoPath = (Join-Path $DefaultInstallPath -ChildPath nodeinfo.json),
 
     # BootModuleZipURL - Link to the Zip file for the Bootstrap module
     [string] $BootModuleZipURL = "https://github.com/rsWinAutomationSupport/rsboot/archive/ModulePOC.zip",
@@ -321,30 +321,30 @@ Write-Verbose "Setting LocalMachine execurtion policy to RemoteSigned"
 Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force
 
 Write-Verbose "Setting environment variables"
-[Environment]::SetEnvironmentVariable('defaultPath',$DefaultPath,'Machine')
+[Environment]::SetEnvironmentVariable('defaultPath',$DefaultInstallPath,'Machine')
 [Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 
-Write-Verbose " - DefaultPath location: $DefaultPath"
+Write-Verbose " - DefaultPath location: $DefaultInstallPath"
 Write-Verbose " - NodeInfoPath location: $NodeInfoPath"
 
-if (-not(Test-Path $DefaultPath))
+if (-not(Test-Path $DefaultInstallPath))
 {
-    Write-Verbose "Creating configuration directory: $DefaultPath"
-    New-Item -Path $DefaultPath -ItemType Directory
+    Write-Verbose "Creating configuration directory: $DefaultInstallPath"
+    New-Item -Path $DefaultInstallPath -ItemType Directory
 }
 else
 {
     Write-Verbose "Configuration directory already exists"
 }
 
-Write-Verbose "Setting folder permissions for $DefaultPath"
+Write-Verbose "Setting folder permissions for $DefaultInstallPath"
 
-#Disable persmission inheritance on $defaultPath
-$objACL = Get-ACL -Path $defaultPath
+#Disable persmission inheritance on $DefaultInstallPath
+$objACL = Get-ACL -Path $DefaultInstallPath
 $objACL.SetAccessRuleProtection($True, $True)
-Set-ACL $DefaultPath $objACL
+Set-ACL $DefaultInstallPath $objACL
 
-# Remove BUILTIN\Users access to $defaultPath
+# Remove BUILTIN\Users access to $DefaultInstallPath
 $colRights = [System.Security.AccessControl.FileSystemRights]"ReadAndExecute" 
 $InheritanceFlag = [System.Security.AccessControl.InheritanceFlags]::None 
 $PropagationFlag = [System.Security.AccessControl.PropagationFlags]::None 
@@ -352,17 +352,17 @@ $objType =[System.Security.AccessControl.AccessControlType]::Allow
 $objUser = New-Object System.Security.Principal.NTAccount("BUILTIN\Users") 
 $objACE = New-Object System.Security.AccessControl.FileSystemAccessRule `
     ($objUser, $colRights, $InheritanceFlag, $PropagationFlag, $objType) 
-$objACL = Get-ACL -Path $defaultPath
+$objACL = Get-ACL -Path $DefaultInstallPath
 $objACL.RemoveAccessRuleAll($objACE) 
-Set-ACL $defaultPath $objACL
+Set-ACL $DefaultInstallPath $objACL
 
 if (($BootParameters -eq $null) -or ($BootParameters -eq ''))
 {
     Write-Verbose "BootParameters were not provided, checking local secrets.."
-    if (Test-Path "$DefaultPath\BootParameters.xml")
+    if (Test-Path "$DefaultInstallPath\BootParameters.xml")
     {
-        Write-Verbose "Reading contents of $DefaultPath\BootParameters.xml"
-        $BootParameters = Import-Clixml "$DefaultPath\BootParameters.xml"
+        Write-Verbose "Reading contents of $DefaultInstallPath\BootParameters.xml"
+        $BootParameters = Import-Clixml "$DefaultInstallPath\BootParameters.xml"
     }
     else
     {
@@ -372,8 +372,8 @@ if (($BootParameters -eq $null) -or ($BootParameters -eq ''))
 }
 else
 {
-    Write-Verbose "Saving boot parameters to $DefaultPath\BootParameters.xml"
-    $BootParameters | Export-Clixml -Path "$DefaultPath\BootParameters.xml" -Force
+    Write-Verbose "Saving boot parameters to $DefaultInstallPath\BootParameters.xml"
+    $BootParameters | Export-Clixml -Path "$DefaultInstallPath\BootParameters.xml" -Force
 }
 
 #endregion
@@ -416,6 +416,7 @@ if (-not (Test-Connection $Target -Quiet))
     until (-not (Test-Connection $Target -Quiet))
 }
 
+<#
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $WinTemp = "$env:windir\Temp"
 $ModuleFileName = $BootModuleZipURL.Split("/")[-1]
@@ -446,6 +447,7 @@ if (Test-Path "$PSModuleLocation\$ModuleName")
 }
 Write-Verbose "Installing rsBoot module"
 Move-Item -Path "$WinTemp\$ModuleName" -Destination $PSModuleLocation
+#>
 Write-Verbose "Importing $ModuleName module"
 Import-Module -Name $ModuleName -Force -Verbose
 #endregion
@@ -472,19 +474,24 @@ if ($PullServerConfig -ne $null)
     }
     # Need $pullserver_config parameter/variable
     Write-Secrets -PullServerAddress $PullServerAddress -pullserver_config $PullServerConfig `
-                  -BootParameters $BootParameters -Path $DefaultPath
+                  -BootParameters $BootParameters -Path $DefaultInstallPath
     
     Write-Verbose "Configuring WinRM"
     Enable-WinRM
 
     Write-Verbose "Starting Pull Server Boot DSC configuration run"
     PullBoot -BootParameters $BootParameters `
-             -PullConfigInstallPath $DefaultPath `
-             -OutputPath (Join-Path $DefaultPath -ChildPath DSCboot)
+             -PullConfigInstallPath $DefaultInstallPath `
+             -OutputPath (Join-Path $DefaultInstallPath -ChildPath DSCboot)
 
-    Start-DscConfiguration -Path (Join-Path $DefaultPath -ChildPath DSCboot) -Wait -Verbose -Force
+    Start-DscConfiguration -Path (Join-Path $DefaultInstallPath -ChildPath DSCboot) -Wait -Verbose -Force
 
     <#
+    
+    
+
+    # Boot -PullServerAddress $PullServerAddress -OutputPath $DefaultInstallPath -Verbose
+    # Start-DscConfiguration -Force -Path $DefaultInstallPath -Wait -Verbose
     Set-LCM
     #PullServer - Run RsPlatform and then PullServer config file
     if($secrets){
@@ -507,8 +514,8 @@ else
     
     # Get-NICInfo
     Enable-WinRM
-    # Boot -PullServerAddress $PullServerAddress -OutputPath $defaultPath -Verbose
-    # Start-DscConfiguration -Force -Path $defaultPath -Wait -Verbose
+    # Boot -PullServerAddress $PullServerAddress -OutputPath $DefaultInstallPath -Verbose
+    # Start-DscConfiguration -Force -Path $DefaultInstallPath -Wait -Verbose
     Set-LCM
     Start-DscConfiguration -UseExisting -Wait -Force -Verbose
 }
