@@ -35,13 +35,15 @@ Param
 
     [int] $PullPort = 8080,
 
-    # BootParameters - Hashtable that contains bootstrap parameters for the type of server being built
+    # BootParameters - Hashtable that contains bootstrap parameters
     [hashtable] $BootParameters
 )
 
 #########################################################################################################
-# Helper functions
+# Initial DSC Configuration for Pull Server (PullBoot & Platform) and Client (ClientBoot)
 #region##################################################################################################
+
+# Initial Pull Server DSC Configuration
 Configuration PullBoot
 {  
     param 
@@ -302,8 +304,30 @@ Configuration PullBoot
             }
             DependsOn = '[Script]CreateServerCertificate'
         }
+        LocalConfigurationManager
+        {
+            AllowModuleOverwrite           = 'True'
+            ConfigurationModeFrequencyMins = 30
+            ConfigurationMode              = 'ApplyAndAutoCorrect'
+            RebootNodeIfNeeded             = 'True'
+            RefreshMode                    = 'PUSH'
+            RefreshFrequencyMins           = 30
+        }
     } 
 }
+
+Configuration InstallPlatformModules
+{
+    Import-DscResource -ModuleName rsPlatform
+    Node $env:COMPUTERNAME
+    {
+        rsPlatform Modules
+        {
+            Ensure = 'Present'
+        }
+    }
+}
+
 
 #endregion
 
@@ -314,7 +338,7 @@ Configuration PullBoot
 # Bootstrap log configuration
 $TimeDate = (Get-Date -Format ddMMMyyyy_hh-mm-ss).ToString()
 $LogPath = (Join-Path $env:SystemRoot -ChildPath "Temp\DSCBootstrap_$TimeDate.log")
-#Start-Transcript -Path $LogPath -Force
+Start-Transcript -Path $LogPath -Force
 
 Write-Verbose "Configuring local environment..."
 Write-Verbose "Setting LocalMachine execurtion policy to RemoteSigned"
@@ -416,7 +440,6 @@ if (-not (Test-Connection $Target -Quiet))
     until (-not (Test-Connection $Target -Quiet))
 }
 
-<#
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $WinTemp = "$env:windir\Temp"
 $ModuleFileName = $BootModuleZipURL.Split("/")[-1]
@@ -447,7 +470,6 @@ if (Test-Path "$PSModuleLocation\$ModuleName")
 }
 Write-Verbose "Installing rsBoot module"
 Move-Item -Path "$WinTemp\$ModuleName" -Destination $PSModuleLocation
-#>
 Write-Verbose "Importing $ModuleName module"
 Import-Module -Name $ModuleName -Force -Verbose
 #endregion
@@ -464,17 +486,24 @@ if ($BootParameters.PreBoot -ne $null)
 #########################################################################################################
 # Execute main bootstrap process
 #region##################################################################################################
+# Set folder for DSC boot mof files
+$DSCbootMofFolder = (Join-Path $DefaultInstallPath -ChildPath DSCboot)
+
 # Determine if we're building a Pull server or a client
 if ($PullServerConfig -ne $null)
 {
     Write-Verbose "Initiating DSC Pull Server bootstrap..."
+
+    # Default to using local hostname if it was not provided
     if(!($PullServerAddress))
     {
         $PullServerAddress = $env:COMPUTERNAME
     }
     # Need $pullserver_config parameter/variable
-    Write-Secrets -PullServerAddress $PullServerAddress -pullserver_config $PullServerConfig `
-                  -BootParameters $BootParameters -Path $DefaultInstallPath
+    Write-Secrets -PullServerAddress $PullServerAddress `
+                  -pullserver_config $PullServerConfig `
+                  -BootParameters $BootParameters `
+                  -Path $DefaultInstallPath
     
     Write-Verbose "Configuring WinRM"
     Enable-WinRM
@@ -482,22 +511,39 @@ if ($PullServerConfig -ne $null)
     Write-Verbose "Starting Pull Server Boot DSC configuration run"
     PullBoot -BootParameters $BootParameters `
              -PullConfigInstallPath $DefaultInstallPath `
-             -OutputPath (Join-Path $DefaultInstallPath -ChildPath DSCboot)
+             -OutputPath $DSCbootMofFolder
 
-    Start-DscConfiguration -Path (Join-Path $DefaultInstallPath -ChildPath DSCboot) -Wait -Verbose -Force
-
-    <#
+    Start-DscConfiguration -Path $DSCbootMofFolder -Wait -Verbose -Force
     
+    Write-Verbose "Set Pull Server LCM"
+    Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
     
+    Write-Verbose "Resetting DSC process to clear mopdule cache..."
+    # WMF4 workaround for resetting PowerShell module cache before installing rsPlatform
+    # See https://technet.microsoft.com/en-gb/library/dn249926.aspx
+    # 
+    # Find the process that is hosting the DSC engine
+    $dscProcessID = Get-WmiObject msft_providers | 
+    Where-Object {$_.provider -like 'dsccore'} | 
+    Select-Object -ExpandProperty HostProcessIdentifier 
+    # Stop the process
+    Get-Process -Id $dscProcessID | Stop-Process -Force
 
-    # Boot -PullServerAddress $PullServerAddress -OutputPath $DefaultInstallPath -Verbose
-    # Start-DscConfiguration -Force -Path $DefaultInstallPath -Wait -Verbose
-    Set-LCM
-    #PullServer - Run RsPlatform and then PullServer config file
-    if($secrets){
-        Set-rsPlatform
-        Set-Pull -pullserver_config $pullserver_config
-    }#>
+    Write-Verbose "Running DSC config to install extra DSC modules as defined in rsPlatform configuration"
+    InstallPlatformModules -OutputPath 'C:\Windows\Temp' -Verbose
+    Start-DscConfiguration -Path 'C:\Windows\Temp' -Wait -Verbose -Force
+
+    $PullServerDSCConfigPath = "$DefaultInstallPath\DSCAutomation\$($BootParameters.mR)\$PullServerConfig"
+    Write-Verbose "Executing final Pull server DSC script from configuration repository"
+    Write-Verbose "Configuration file: $PullServerDSCConfigPath"
+    try
+    {
+        Invoke-Expression $PullServerDSCConfigPath -Verbose
+    }
+    catch
+    {
+        Write-Verbose "Error in Pull Server DSC configuration: $($_.Exception.message)"
+    }
 }
 
 <#
@@ -532,6 +578,6 @@ if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
     Write-Verbose "Removing the 'DSCBoot' task..."
     Unregister-ScheduledTask -TaskName DSCBoot -Confirm:$false
 }
-#Stop-Transcript
+Stop-Transcript
 
 
