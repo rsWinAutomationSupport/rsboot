@@ -357,8 +357,10 @@ Configuration PullBoot
     } 
 }
 
-function Invoke-InstallPlatformModules 
+function Install-PlatformModules 
 {
+# We cannot run this code directly until the rsPlatform module is installed, 
+# so we'll create it as string for now
 @'
     Configuration InstallPlatformModules 
     {
@@ -564,9 +566,9 @@ if ($PullServerConfig -ne $null)
     Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
 
     Write-Verbose "Running DSC config to install extra DSC modules as defined in rsPlatform configuration"
-    Invoke-InstallPlatformModules
+    Install-PlatformModules
 
-    $PullServerDSCConfigPath = "$DefaultInstallPath\DSCAutomation\$($BootParameters.mR)\$PullServerConfig"
+    $PullServerDSCConfigPath = "$DefaultInstallPath\$($BootParameters.mR)\$PullServerConfig"
     Write-Verbose "Executing final Pull server DSC script from configuration repository"
     Write-Verbose "Configuration file: $PullServerDSCConfigPath"
     try
