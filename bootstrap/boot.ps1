@@ -543,7 +543,7 @@ if ($BootParameters.PreBoot -ne $null)
 $DSCbootMofFolder = (Join-Path $DefaultInstallPath -ChildPath DSCboot)
 
 # Determine if we're building a Pull server or a client
-if ($PullServerConfig -ne $null)
+if ($PullServerConfig)
 {
     Write-Verbose "Initiating DSC Pull Server bootstrap..."
     if(!($PullServerAddress))
@@ -586,7 +586,7 @@ if ($PullServerConfig -ne $null)
 }
 else
 {
-    Write-Verbose "Initiating Client-specific  bootstrap steps..."
+    Write-Verbose "Initiating Client-specific bootstrap steps..."
 
     Write-Verbose "Configuring WinRM"
     Enable-WinRM
@@ -594,7 +594,7 @@ else
     # Check if PullServerAddress provided is an IP
     if($PullServerAddress -as [ipaddress])
     {
-        Write-Verbose "Pull Server Address provided seems ot be an IP - trying to resovle its local hostname..."
+        Write-Verbose "Pull Server Address provided seems to be an IP - trying to resovle its local hostname..."
         
         # Attempt to resolve Pull server hostname by checking Common Name property
         # from the public certificate of DSC web endpoint
