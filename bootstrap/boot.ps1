@@ -205,7 +205,7 @@ Configuration PullBoot
                 $RepoPath = Join-Path -Path $using:PullConfigInstallPath -ChildPath $BootParams.mR
                 if (Test-Path $RepoPath)
                 {
-                    Write-Verbose "Existing config fodler found - deleting..."
+                    Write-Verbose "Existing config folder found - deleting..."
                     Remove-Item $RepoPath -Force -Recurse
                 }
 
@@ -577,11 +577,11 @@ if ($PullServerConfig -ne $null)
     Write-Verbose "Configuration file: $PullServerDSCConfigPath"
     try
     {
-        Invoke-Expression $PullServerDSCConfigPath -Verbose
+        & "$PullServerDSCConfigPath" -Verbose
     }
     catch
     {
-        Write-Verbose "Error in Pull Server DSC configuration: $($_.Exception.message)"
+        Write-Verbose "Error in Pull Server DSC configuration: $($_.Exception)"
     }
 }
 else
