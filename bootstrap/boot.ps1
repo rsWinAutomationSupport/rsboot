@@ -213,9 +213,8 @@ Configuration PullBoot
                 Start-Process -Wait 'git.exe' -ArgumentList $gitArguments
             }
             TestScript = {
-                    # We will always return false to make sure that we run the Set script in all cases
-                    return $false
-                }
+                # We will always return false to make sure that we run the Set script in all cases
+                return $false
             }
             GetScript = {
                 $BootParams = $using:BootParameters
