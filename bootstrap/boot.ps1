@@ -200,18 +200,20 @@ Configuration PullBoot
                 # doing this only to help code readability
                 $BootParams = $using:BootParameters
                 $gitArguments = "clone --branch $($BootParams.branch_rsConfigs) https://$($BootParams.git_Oauthtoken)@github.com/$($BootParams.git_username)/$($BootParams.mR).git"
+                
                 Set-Location $using:PullConfigInstallPath -Verbose
+                $RepoPath = Join-Path -Path $using:PullConfigInstallPath -ChildPath $BootParams.mR
+                if (Test-Path $RepoPath)
+                {
+                    Write-Verbose "Existing config fodler found - deleting..."
+                    Remove-Item $RepoPath -Force -Recurse
+                }
+
                 Write-Verbose "Cloning DSC configuration repository"
                 Start-Process -Wait 'git.exe' -ArgumentList $gitArguments
             }
             TestScript = {
-                $BootParams = $using:BootParameters
-                if(Test-Path -Path $(Join-Path $using:PullConfigInstallPath $BootParams.mR)) 
-                {
-                    return $true
-                }
-                else 
-                {
+                    # We will always return false to make sure that we run the Set script in all cases
                     return $false
                 }
             }
