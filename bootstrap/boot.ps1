@@ -597,11 +597,11 @@ else
         Write-Verbose "Pull Server Address provided seems ot be an IP - trying to resovle its local hostname..."
         
         # Attempt to resolve Pull server hostname by checking Common Name property
-        # from the public certificate of the DSC endpoint
+        # from the public certificate of DSC web endpoint
         $PullUrl = ("https://",$PullServerAddress,":",$PullServerPort -join '')
         do 
         {
-            $webRequest = [Net.WebRequest]::Create($uri)
+            $webRequest = [Net.WebRequest]::Create($PullUrl)
             try 
             {
                 $webRequest.GetResponse()
