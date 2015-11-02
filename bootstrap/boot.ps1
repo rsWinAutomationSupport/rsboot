@@ -33,14 +33,17 @@ Param
     # File name of DSC configuration file of pull server
     [string] $PullServerConfig,
 
-    [int] $PullPort = 8080,
+    [int] $PullServerPort = 8080,
 
     # BootParameters - Hashtable that contains bootstrap parameters
-    [hashtable] $BootParameters
+    [hashtable] $BootParameters,
+
+    # FQDN Hostname or IP Address of the pull server
+    [string] $PullServerAddress
 )
 
 #########################################################################################################
-# Initial DSC Configuration for Pull Server (PullBoot & Platform) and Client (ClientBoot)
+# Bootstrap DSC Configuration definitions for Pull Server (PullBoot & Platform) and Client (ClientBoot)
 #region##################################################################################################
 
 # Initial Pull Server DSC Configuration
@@ -548,7 +551,7 @@ if ($PullServerConfig -ne $null)
     }
     # Need $pullserver_config parameter/variable
     Write-Secrets -PullServerAddress $PullServerAddress `
-                  -pullserver_config $PullServerConfig `
+                  -PullServer_config $PullServerConfig `
                   -BootParameters $BootParameters `
                   -Path $DefaultInstallPath
     
@@ -580,27 +583,46 @@ if ($PullServerConfig -ne $null)
         Write-Verbose "Error in Pull Server DSC configuration: $($_.Exception.message)"
     }
 }
-
-<#
 else
 {
-    Write-Verbose "Initiating DSC Client bootstrap..."
+    Write-Verbose "Initiating Client-specific  bootstrap steps..."
+
+    Write-Verbose "Configuring WinRM"
+    Enable-WinRM
 
     # Check if PullServerAddress provided is an IP
-    if($PullServerAddress -notmatch '[a-zA-Z]')
+    if($PullServerAddress -as [ipaddress])
     {
-        $PullServerAddress = Get-PullServerInfo -PullServerAddress $PullServerAddress -PullPort $PullPort
+        Write-Verbose "Pull Server Address provided seems ot be an IP - trying to resovle its local hostname..."
+        
+        # Attempt to resolve Pull server hostname by checking Common Name property
+        # from the public certificate of the DSC endpoint
+        $PullUrl = ("https://",$PullServerAddress,":",$PullServerPort -join '')
+        do 
+        {
+            $webRequest = [Net.WebRequest]::Create($uri)
+            try 
+            {
+                $webRequest.GetResponse()
+            }
+            catch {}
+
+            $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
+            if( !($PullServerName))
+            {
+                Write-Verbose "Failed to resolve Pull server Name - sleeping for 10 seconds..."
+                Start-Sleep -Seconds 10 
+            }
+        }
+        while(!($PullServerName))
     }
 
-    
-    # Get-NICInfo
-    Enable-WinRM
     # Boot -PullServerAddress $PullServerAddress -OutputPath $DefaultInstallPath -Verbose
     # Start-DscConfiguration -Force -Path $DefaultInstallPath -Wait -Verbose
-    Set-LCM
-    Start-DscConfiguration -UseExisting -Wait -Force -Verbose
+
+    Write-Verbose "Applying final Client DSC Configuration received from Pull server - $PullServerName"
+    # Start-DscConfiguration -UseExisting -Wait -Force -Verbose
 }
-#>
 #endregion
 
 
