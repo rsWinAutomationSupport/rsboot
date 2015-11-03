@@ -664,7 +664,7 @@ Configuration ClientBoot
         LocalConfigurationManager
         {
             AllowModuleOverwrite = 'True'
-            ConfigurationID = "$($using:nodeinfo.uuid)"
+            ConfigurationID = "$($nodeinfo.uuid)"
             CertificateID = (Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -EQ "CN=$($env:COMPUTERNAME)_enc").Thumbprint
             ConfigurationModeFrequencyMins = 30
             ConfigurationMode = 'ApplyAndAutoCorrect'
@@ -672,7 +672,7 @@ Configuration ClientBoot
             RefreshMode = 'Pull'
             RefreshFrequencyMins = 30
             DownloadManagerName = 'WebDownloadManager'
-            DownloadManagerCustomData = (@{ServerUrl = "https://$($using:nodeinfo.PullServerName):$($using:nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
+            DownloadManagerCustomData = (@{ServerUrl = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
         }
     } 
 }
