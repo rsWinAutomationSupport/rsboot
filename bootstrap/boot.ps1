@@ -38,12 +38,12 @@ Param
     # BootParameters - Hashtable that contains bootstrap parameters
     [hashtable] $BootParameters,
 
-    # FQDN Hostname or IP Address of the pull server
+    # Valid FQDN Hostname or IP Address of the pull server
     [string] $PullServerAddress
 )
 
 #########################################################################################################
-# Bootstrap DSC Configuration definitions for Pull Server (PullBoot & Platform) and Client (ClientBoot)
+# Bootstrap DSC Configuration definitions for Pull Server (PullBoot) and Client (ClientBoot)
 #region##################################################################################################
 
 # Initial Pull Server DSC Configuration
@@ -361,6 +361,322 @@ Configuration PullBoot
     } 
 }
 
+Configuration ClientBoot 
+{  
+    param 
+    (
+        [string] $PullServerAddress,
+        [string] $PullServerName,
+        [int] $PullServerPort,
+        [string] $InstallPath,
+        [string] $NodeInfo
+    )
+    node $env:COMPUTERNAME 
+    {
+        File DevOpsDir
+        {
+            DestinationPath = $InstallPath
+            Ensure = 'Present'
+            Type = 'Directory'
+        }
+        Script GetWMF4 
+        {
+            SetScript = {
+                $Uri = 'http://download.microsoft.com/download/3/D/6/3D61D262-8549-4769-A660-230B67E15B25/Windows6.1-KB2819745-x64-MultiPkg.msu'
+                Write-Verbose "Downloading WMF4"
+                Invoke-WebRequest -Uri $Uri -OutFile 'C:\Windows\temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -UseBasicParsing
+            }
+
+            TestScript = {
+                if( $PSVersionTable.PSVersion.Major -ge 4 ) 
+                {
+                    return $true
+                }
+                if( -not (Test-Path -Path 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu') ) 
+                {
+                    Write-Verbose "WMF4 Installer not found locally"
+                    return $false
+                }
+                else
+                {
+                    return $true
+                }
+            }
+
+            GetScript = {
+                return @{
+                    'Result' = 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu'
+                }
+            }
+        }
+        Script InstallWMF4 
+        {
+            SetScript = {
+                Write-Verbose "Installing WMF4"
+                Start-Process -Wait -FilePath 'C:\Windows\Temp\Windows6.1-KB2819745-x64-MultiPkg.msu' -ArgumentList '/quiet' -Verbose
+                Write-Verbose "Setting DSC reboot flag"
+                Start-Sleep -Seconds 30
+                $global:DSCMachineStatus = 1 
+            }
+            TestScript = {
+                if($PSVersionTable.PSVersion.Major -ge 4) 
+                {
+                    return $true
+                }
+                else 
+                {
+                    Write-Verbose "Current PowerShell version is lower than the requried v4"
+                    return $false
+                }
+            }
+            GetScript = {
+                return @{'Result' = $PSVersionTable.PSVersion.Major}
+            }
+            DependsOn = '[Script]GetWMF4'
+        }
+        Script CreateEncryptionCertificate 
+        {
+            SetScript = {
+                Import-Module -Name rsBoot
+                $EndDate = (Get-Date).AddYears(25) | Get-Date -Format MM/dd/yyyy
+                $CertificateSubject = "CN=$($env:COMPUTERNAME)_enc"
+
+                Get-ChildItem -Path Cert:\LocalMachine\My\ |
+                Where-Object -FilterScript {$_.Subject -eq $CertificateSubject} | 
+                Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
+
+                New-SelfSignedCertificateEx -Subject $CertificateSubject `
+                                            -NotAfter $EndDate `
+                                            -StoreLocation LocalMachine `
+                                            -StoreName My `
+                                            -Exportable `
+                                            -KeyLength 2048 `
+                                            -EnhancedKeyUsage 1.3.6.1.5.5.7.3.1,1.3.6.1.5.5.7.3.2
+            }
+            TestScript = {
+                $CertificateSubject = "CN=$($env:COMPUTERNAME)_enc"
+                $ClientCert = [bool](Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $CertificateSubject})
+                if($ClientCert)
+                {
+                    return $true
+                }
+                else 
+                {
+                    return $false
+                }
+            }
+            GetScript = {
+                $CertificateSubject = "CN=$($env:COMPUTERNAME)_enc"
+                return @{
+                    'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq $CertificateSubject}).Thumbprint
+                }
+            }
+        }
+        # MSMQ is required due to us requiring System.Messaging 
+        WindowsFeature MSMQ 
+        {
+            Name = 'MSMQ'
+            Ensure = 'Present'
+        }
+        # Retrieve the public key of pull server cert and store in root store
+        Script GetPullPublicCert 
+        {
+            SetScript = {
+                $Uri = "https://",$using:PullServerAddress,":",$using:PullServerPort -join ''
+                do 
+                {
+                    $rerun = $true
+                    try 
+                    {
+                        Invoke-WebRequest -Uri $Uri -ErrorAction SilentlyContinue -UseBasicParsing
+                    }
+                    catch 
+                    {
+                        Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
+                        if($($_.Exception.message) -like '*SSL/TLS*') 
+                        {
+                            $rerun = $false 
+                        }
+                        else 
+                        {
+                            Write-Verbose "Failed to connect to the Pull server - sleeping for 10 seconds..."
+                            Start-Sleep -Seconds 10
+                        }
+                    }
+                }
+                while($rerun)
+                
+                $webRequest = [Net.WebRequest]::Create($Uri)
+                try 
+                {
+                    $webRequest.GetResponse() 
+                }
+                catch
+                {
+                }
+                $cert = $webRequest.ServicePoint.Certificate
+                
+                # Remove existing Pull server certificates that may cause a conflict
+                Get-ChildItem -Path Cert:\LocalMachine\Root\ |
+                Where-Object -FilterScript {$_.Subject -eq $cert.Issuer} |
+                Remove-Item
+                
+                Write-Verbose "Adding PullServer Root Certificate to Cert:\LocalMachine\Root"
+                $store = Get-Item Cert:\LocalMachine\Root
+                $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]'ReadWrite')
+                $store.Add($cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+                $store.Close()
+            }
+            TestScript = {
+                $Uri = "https://",$using:PullServerAddress,":",$using:PullServerPort -join ''
+                do 
+                {
+                    $rerun = $true
+                    try 
+                    {
+                        Invoke-WebRequest -Uri $Uri -ErrorAction SilentlyContinue -UseBasicParsing
+                    }
+                    catch 
+                    {
+                        Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
+                        if($($_.Exception.message) -like '*SSL/TLS*') 
+                        {
+                            $rerun = $false 
+                        }
+                        else
+                        {
+                            Start-Sleep -Seconds 10 
+                        }
+                    }
+                }
+                while($rerun)
+                $webRequest = [Net.WebRequest]::Create($Uri)
+                try 
+                {
+                $webRequest.GetResponse() 
+                }
+                catch
+                {
+                }
+                $cert = $webRequest.ServicePoint.Certificate
+                $CertMatch = (Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq ($cert.GetCertHashString()) ).count
+                if($CertMatch -eq 0)
+                {
+                    return $false
+                }
+                else
+                {
+                    return $true
+                }
+            }
+            GetScript = {
+                $Uri = "https://",$using:PullServerAddress,":",$using:PullServerPort -join ''
+                $webRequest = [Net.WebRequest]::Create($uri)
+                try 
+                {
+                    $webRequest.GetResponse() 
+                }
+                catch
+                {
+                }
+                $cert = $webRequest.ServicePoint.Certificate
+                return @{
+                    'Result' = (Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq ($cert.GetCertHashString()))
+                }
+            }
+        }
+        # If PullServerAddress was an IP, set a HOSTS entry to resolve PullServer hostname
+        if($PullServerAddress -as [ipaddress])
+        {
+            Script SetHostFile 
+            {
+                SetScript = {
+                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
+                    $HostFileContents = (Get-Content -Path $HostFilePath).where({$_ -notmatch $($using:PullServerAddress) -AND $_ -notmatch $($using:PullServerName)})
+                    $HostFileContents += "$using:PullServerAddress    $using:PullServerName"
+                    Set-Content -Value $HostFileContents -Path $HostFilePath -Force -Encoding ASCII
+                }
+                TestScript = {
+                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
+                    $HostEntryExists = [bool](Get-Content -Path $HostFilePath).where{$_ -match "$using:PullServerAddress    $using:PullServerName"}
+                    return $HostEntryExists
+                }
+                GetScript = {
+                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
+                    $HostEntry = (Get-Content -Path $HostFilePath).where{$_ -match "$using:PullServerAddress    $using:PullServerName"}
+                    return @{
+                        'Result' = $HostEntry
+                    }
+                }
+            }
+        }
+        # Retreieve all key local client variable and push them to Pull server via MSMQ to register
+        Script SendClientPublicCert 
+        {
+            SetScript = {
+                $ClientPublicCert = ((Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
+                $MessageBody = @{'Name' = "$env:COMPUTERNAME"
+                                'uuid' = $($using:nodeinfo.uuid)
+                                'dsc_config' = $($using:nodeinfo.dsc_config)
+                                'shared_key' = $($using:nodeinfo.shared_key)
+                                'PublicCert' = "$([System.Convert]::ToBase64String($ClientPublicCert))"
+                                'NetworkAdapters' = $($using:nodeinfo.NetworkAdapters)
+                } | ConvertTo-Json
+
+                [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
+                do 
+                {
+                    try 
+                    {
+                        $msg = New-Object System.Messaging.Message
+                        $msg.Label = 'execute'
+                        $msg.Body = $MessageBody
+                        $queueName = "FormatName:DIRECT=HTTPS://$($using:nodeinfo.PullServerName)/msmq/private$/rsdsc"
+                        $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
+                        Write-Verbose "Trying to register with pull server..."
+                        $queue.Send($msg)
+                        Write-Verbose "Waiting 60 seconds for pull server to generate mof file..."
+                        Start-Sleep -Seconds 60
+                        Write-Verbose "Checking if client configuration has been generated..."
+                        $Uri = "https://$($using:nodeinfo.PullServerName):$($using:nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($using:nodeinfo.uuid)`')/ConfigurationContent"
+                        $statusCode = (Invoke-WebRequest -Uri $Uri -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
+                    }
+                    catch 
+                    {
+                        Write-Verbose "Error retrieving configuration $($_.Exception.message)"
+                    }
+                }
+                while($statusCode -ne 200)
+                Write-Verbose "Looks like client mof file has been generated on the pull server!"
+            }
+            TestScript = {
+                # We really want to run this every time
+                Return $false
+                }
+            GetScript = {
+                # Not terribly relevant in this instance
+                return @{
+                    'Result' = $true
+                }
+            }
+            DependsOn = @('[WindowsFeature]MSMQ','[Script]GetPullPublicCert','[Script]CreateEncryptionCertificate')
+        }
+        LocalConfigurationManager
+        {
+            AllowModuleOverwrite = 'True'
+            ConfigurationID = "$($using:nodeinfo.uuid)"
+            CertificateID = (Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -EQ "CN=$($env:COMPUTERNAME)_enc").Thumbprint
+            ConfigurationModeFrequencyMins = 30
+            ConfigurationMode = 'ApplyAndAutoCorrect'
+            RebootNodeIfNeeded = 'True'
+            RefreshMode = 'Pull'
+            RefreshFrequencyMins = 30
+            DownloadManagerName = 'WebDownloadManager'
+            DownloadManagerCustomData = (@{ServerUrl = "https://$($using:nodeinfo.PullServerName):$($using:nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
+        }
+    } 
+}
+
 function Install-PlatformModules 
 {
 # We cannot run this code directly until the rsPlatform module is installed, 
@@ -391,6 +707,7 @@ function Install-PlatformModules
 # Bootstrap log configuration
 $TimeDate = (Get-Date -Format ddMMMyyyy_hh-mm-ss).ToString()
 $LogPath = (Join-Path $env:SystemRoot -ChildPath "Temp\DSCBootstrap_$TimeDate.log")
+$WinTemp = "$env:windir\Temp"
 Start-Transcript -Path $LogPath -Force
 
 Write-Verbose "Configuring local environment..."
@@ -401,7 +718,7 @@ Write-Verbose "Setting environment variables"
 [Environment]::SetEnvironmentVariable('defaultPath',$DefaultInstallPath,'Machine')
 [Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
 
-Write-Verbose " - DefaultPath location: $DefaultInstallPath"
+Write-Verbose " - Install path: $DefaultInstallPath"
 Write-Verbose " - NodeInfoPath location: $NodeInfoPath"
 
 if (-not(Test-Path $DefaultInstallPath))
@@ -415,7 +732,6 @@ else
 }
 
 Write-Verbose "Setting folder permissions for $DefaultInstallPath"
-
 #Disable persmission inheritance on $DefaultInstallPath
 $objACL = Get-ACL -Path $DefaultInstallPath
 $objACL.SetAccessRuleProtection($True, $True)
@@ -494,7 +810,6 @@ if (-not (Test-Connection $Target -Quiet))
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$WinTemp = "$env:windir\Temp"
 $ModuleFileName = $BootModuleZipURL.Split("/")[-1]
 $ZipPath = "$WinTemp\$ModuleFileName"
 
@@ -540,7 +855,7 @@ if ($BootParameters.PreBoot -ne $null)
 # Execute main bootstrap process
 #region##################################################################################################
 # Set folder for DSC boot mof files
-$DSCbootMofFolder = (Join-Path $DefaultInstallPath -ChildPath DSCboot)
+$DSCbootMofFolder = (Join-Path $WinTemp -ChildPath DSCBootMof)
 
 # Determine if we're building a Pull server or a client
 if ($PullServerConfig)
@@ -588,13 +903,28 @@ else
 {
     Write-Verbose "Initiating Client-specific bootstrap steps..."
 
+    # Will hold Client configuration values to store in $NodeInfoPath
+    $NodeInfo = @{}
+
+    # Check that all client boot parameters have been provided
+    $MandatoryClientKeys = @('shared_key','dsc_config')
+    ForEach($key in $MandatoryClientKeys)
+    {
+        if($BootParameters.keys -notcontains $key)
+        { 
+            Write-Verbose "$key key is missing from BootParameters"
+            exit
+        }
+    }
+    $NodeInfo.Add('dsc_config',$BootParameters.dsc_config)
+    $NodeInfo.Add('shared_key',$BootParameters.shared_key)
+
     Write-Verbose "Configuring WinRM"
     Enable-WinRM
 
-    # Check if PullServerAddress provided is an IP
     if($PullServerAddress -as [ipaddress])
     {
-        Write-Verbose "Pull Server Address provided seems to be an IP - trying to resovle its local hostname..."
+        Write-Verbose "Pull Server Address provided seems to be an IP - trying to resovle hostname..."
         
         # Attempt to resolve Pull server hostname by checking Common Name property
         # from the public certificate of DSC web endpoint
@@ -606,8 +936,9 @@ else
             {
                 $webRequest.GetResponse()
             }
-            catch {}
-
+            catch
+            {
+            }
             $PullServerName = $webRequest.ServicePoint.Certificate.Subject -replace '^CN\=','' -replace ',.*$',''
             if( !($PullServerName))
             {
@@ -616,20 +947,36 @@ else
             }
         }
         while(!($PullServerName))
+        Write-Verbose "Resolve Pull server Name: $PullServerName"
+    }
+    # If Pull Server address is a FQDN, then use it for future connections
+    else
+    {
+        $PullServerName = $PullServerAddress
     }
 
-    # Boot -PullServerAddress $PullServerAddress -OutputPath $DefaultInstallPath -Verbose
-    # Start-DscConfiguration -Force -Path $DefaultInstallPath -Wait -Verbose
+    $NodeInfo.Add('PullServerName',$PullServerName)
+    $NodeInfo.Add('PullServerIP',$PullServerAddress)
+    $NodeInfo.Add('PullServerPort',$PullServerPort)
+    $NodeInfo.Add('uuid',[Guid]::NewGuid().Guid)
+    Set-Content -Path $NodeInfoPath -Value $($NodeInfo | ConvertTo-Json -Depth 2) -Force
 
-    Write-Verbose "Applying final Client DSC Configuration received from Pull server - $PullServerName"
+    Write-Verbose "Executing client DSC boot configuration..."
+    ClientBoot  -PullServerAddress $PullServerAddress `
+                -PullServerName $PullServerName `
+                -PullServerPort $PullServerPort `
+                -NodeInfo $NodeInfo `
+                -InstallPath $DefaultInstallPath `
+                -OutputPath $DSCbootMofFolder -Verbose
+    # Start-DscConfiguration -Force -Path $DSCbootMofFolder -Wait -Verbose
+    
+    Write-Verbose "Configure Client LCM"
+    #Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
+
+    Write-Verbose "Applying final Client DSC Configuration from Pull server - $PullServerName"
     # Start-DscConfiguration -UseExisting -Wait -Force -Verbose
 }
 #endregion
-
-
-
-
-
 
 if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
 {
