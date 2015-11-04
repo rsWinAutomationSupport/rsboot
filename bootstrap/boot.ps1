@@ -369,7 +369,7 @@ Configuration ClientBoot
         [string] $PullServerName,
         [int] $PullServerPort,
         [string] $InstallPath,
-        [string] $NodeInfo
+        [string] $NodeInfoPath
     )
     node $env:COMPUTERNAME 
     {
@@ -472,6 +472,38 @@ Configuration ClientBoot
                 }
             }
         }
+        # If PullServerAddress was an IP, set a HOSTS entry to resolve PullServer hostname
+        Script SetHostFile 
+        {
+            SetScript = {
+                if($using:PullServerAddress -as [ipaddress])
+                {
+                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
+                    $HostFileContents = (Get-Content -Path $HostFilePath).where({$_ -notmatch $($using:PullServerAddress) -AND $_ -notmatch $($using:PullServerName)})
+                    $HostFileContents += "$using:PullServerAddress    $using:PullServerName"
+                    Set-Content -Value $HostFileContents -Path $HostFilePath -Force -Encoding ASCII
+                }
+            }
+            TestScript = {
+                if($using:PullServerAddress -as [ipaddress])
+                {
+                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
+                    $HostEntryExists = [bool](Get-Content -Path $HostFilePath).where{$_ -match "$using:PullServerAddress    $using:PullServerName"}
+                    return $HostEntryExists
+                }
+                else
+                {
+                    return $true
+                }
+            }
+            GetScript = {
+                $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
+                $HostEntry = (Get-Content -Path $HostFilePath).where{$_ -match "$using:PullServerAddress    $using:PullServerName"}
+                return @{
+                    'Result' = $HostEntry
+                }
+            }
+        }
         # MSMQ is required due to us requiring System.Messaging 
         WindowsFeature MSMQ 
         {
@@ -483,6 +515,7 @@ Configuration ClientBoot
         {
             SetScript = {
                 $Uri = "https://",$using:PullServerAddress,":",$using:PullServerPort -join ''
+                Write-Verbose "Trying to connect to $Uri"
                 do 
                 {
                     $rerun = $true
@@ -492,9 +525,9 @@ Configuration ClientBoot
                     }
                     catch 
                     {
-                        Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
-                        if($($_.Exception.message) -like '*SSL/TLS*') 
+                        if($($_.Exception.message) -like '*SSL/TLS*')
                         {
+                            Write-Verbose "Sucessfully connected to Pull server"
                             $rerun = $false 
                         }
                         else 
@@ -529,6 +562,7 @@ Configuration ClientBoot
             }
             TestScript = {
                 $Uri = "https://",$using:PullServerAddress,":",$using:PullServerPort -join ''
+                Write-Verbose "Contacting $Uri"
                 do 
                 {
                     $rerun = $true
@@ -584,43 +618,20 @@ Configuration ClientBoot
                     'Result' = (Get-ChildItem Cert:\LocalMachine\Root | Where-Object Thumbprint -eq ($cert.GetCertHashString()))
                 }
             }
-        }
-        # If PullServerAddress was an IP, set a HOSTS entry to resolve PullServer hostname
-        if($PullServerAddress -as [ipaddress])
-        {
-            Script SetHostFile 
-            {
-                SetScript = {
-                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
-                    $HostFileContents = (Get-Content -Path $HostFilePath).where({$_ -notmatch $($using:PullServerAddress) -AND $_ -notmatch $($using:PullServerName)})
-                    $HostFileContents += "$using:PullServerAddress    $using:PullServerName"
-                    Set-Content -Value $HostFileContents -Path $HostFilePath -Force -Encoding ASCII
-                }
-                TestScript = {
-                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
-                    $HostEntryExists = [bool](Get-Content -Path $HostFilePath).where{$_ -match "$using:PullServerAddress    $using:PullServerName"}
-                    return $HostEntryExists
-                }
-                GetScript = {
-                    $HostFilePath = Join-Path -Path $($env:windir) -ChildPath "system32\drivers\etc\hosts"
-                    $HostEntry = (Get-Content -Path $HostFilePath).where{$_ -match "$using:PullServerAddress    $using:PullServerName"}
-                    return @{
-                        'Result' = $HostEntry
-                    }
-                }
-            }
+            DependsOn = @('[Script]SetHostFile')
         }
         # Retreieve all key local client variable and push them to Pull server via MSMQ to register
-        Script SendClientPublicCert 
+        Script SendClientPublicCert
         {
             SetScript = {
+                $nodeinfo = Get-Content $using:NodeInfoPath -Raw | ConvertFrom-Json
                 $ClientPublicCert = ((Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -eq "CN=$env:COMPUTERNAME`_enc").RawData)
                 $MessageBody = @{'Name' = "$env:COMPUTERNAME"
-                                'uuid' = $($using:nodeinfo.uuid)
-                                'dsc_config' = $($using:nodeinfo.dsc_config)
-                                'shared_key' = $($using:nodeinfo.shared_key)
+                                'uuid' = $($nodeinfo.uuid)
+                                'dsc_config' = $($nodeinfo.dsc_config)
+                                'shared_key' = $($nodeinfo.shared_key)
                                 'PublicCert' = "$([System.Convert]::ToBase64String($ClientPublicCert))"
-                                'NetworkAdapters' = $($using:nodeinfo.NetworkAdapters)
+                                'NetworkAdapters' = $($nodeinfo.NetworkAdapters)
                 } | ConvertTo-Json
 
                 [Reflection.Assembly]::LoadWithPartialName('System.Messaging') | Out-Null
@@ -631,19 +642,22 @@ Configuration ClientBoot
                         $msg = New-Object System.Messaging.Message
                         $msg.Label = 'execute'
                         $msg.Body = $MessageBody
-                        $queueName = "FormatName:DIRECT=HTTPS://$($using:nodeinfo.PullServerName)/msmq/private$/rsdsc"
+                        $queueName = "FormatName:DIRECT=HTTPS://$($using:PullServerName)/msmq/private$/rsdsc"
                         $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
-                        Write-Verbose "Trying to register with pull server..."
+                        Write-Verbose "$($msg.Body)"
+                        
+                        Write-Verbose "Trying to register with pull server: $queueName"
                         $queue.Send($msg)
                         Write-Verbose "Waiting 60 seconds for pull server to generate mof file..."
                         Start-Sleep -Seconds 60
                         Write-Verbose "Checking if client configuration has been generated..."
-                        $Uri = "https://$($using:nodeinfo.PullServerName):$($using:nodeinfo.PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($using:nodeinfo.uuid)`')/ConfigurationContent"
+                        $Uri = "https://$($using:PullServerName):$($using:PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent"
+                        Write-Verbose "$Uri"
                         $statusCode = (Invoke-WebRequest -Uri $Uri -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
                     }
                     catch 
                     {
-                        Write-Verbose "Error retrieving configuration $($_.Exception.message)"
+                        Write-Verbose "Error retrieving configuration: $($_.Exception.message)"
                     }
                 }
                 while($statusCode -ne 200)
@@ -659,8 +673,9 @@ Configuration ClientBoot
                     'Result' = $true
                 }
             }
-            DependsOn = @('[WindowsFeature]MSMQ','[Script]GetPullPublicCert','[Script]CreateEncryptionCertificate')
+            DependsOn = @('[WindowsFeature]MSMQ','[Script]GetPullPublicCert','[Script]CreateEncryptionCertificate','[Script]SetHostFile')
         }
+
         LocalConfigurationManager
         {
             AllowModuleOverwrite = 'True'
@@ -672,7 +687,7 @@ Configuration ClientBoot
             RefreshMode = 'Pull'
             RefreshFrequencyMins = 30
             DownloadManagerName = 'WebDownloadManager'
-            DownloadManagerCustomData = (@{ServerUrl = "https://$($nodeinfo.PullServerName):$($nodeinfo.PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
+            DownloadManagerCustomData = (@{ServerUrl = "https://$($PullServerName):$($PullServerPort)/PSDSCPullServer.svc"; AllowUnsecureConnection = "false"})
         }
     } 
 }
@@ -965,16 +980,18 @@ else
     ClientBoot  -PullServerAddress $PullServerAddress `
                 -PullServerName $PullServerName `
                 -PullServerPort $PullServerPort `
-                -NodeInfo $NodeInfo `
+                -NodeInfoPath $NodeInfoPath `
                 -InstallPath $DefaultInstallPath `
                 -OutputPath $DSCbootMofFolder -Verbose
-    # Start-DscConfiguration -Force -Path $DSCbootMofFolder -Wait -Verbose
+                
+
+    Start-DscConfiguration -Force -Path $DSCbootMofFolder -Wait -Verbose
     
     Write-Verbose "Configure Client LCM"
-    #Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
+    Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
 
     Write-Verbose "Applying final Client DSC Configuration from Pull server - $PullServerName"
-    # Start-DscConfiguration -UseExisting -Wait -Force -Verbose
+    Update-DscConfiguration -Wait -Verbose
 }
 #endregion
 
