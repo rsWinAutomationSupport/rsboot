@@ -875,7 +875,9 @@ $DSCbootMofFolder = (Join-Path $WinTemp -ChildPath DSCBootMof)
 # Determine if we're building a Pull server or a client
 if ($PullServerConfig)
 {
+    ##############################################################
     Write-Verbose "Initiating DSC Pull Server bootstrap..."
+    ##############################################################
     if(!($PullServerAddress))
     {
         $PullServerAddress = $env:COMPUTERNAME
@@ -916,7 +918,9 @@ if ($PullServerConfig)
 }
 else
 {
-    Write-Verbose "Initiating Client-specific bootstrap steps..."
+    ##############################################################
+    Write-Verbose "Initiating DSC Client bootstrap..."
+    ##############################################################
 
     # Will hold Client configuration values to store in $NodeInfoPath
     $NodeInfo = @{}
@@ -939,6 +943,9 @@ else
 
     if($PullServerAddress -as [ipaddress])
     {
+        # Legacy compatibility - really needs to go once all platform modules no longer depends on secrets.json
+        $PullServerIP = $PullServerAddress
+        
         Write-Verbose "Pull Server Address provided seems to be an IP - trying to resovle hostname..."
         
         # Attempt to resolve Pull server hostname by checking Common Name property
@@ -971,7 +978,8 @@ else
     }
 
     $NodeInfo.Add('PullServerName',$PullServerName)
-    $NodeInfo.Add('PullServerIP',$PullServerAddress)
+    $NodeInfo.Add('PullServerIP',$PullServerIP)
+    $NodeInfo.Add('PullServerAddress',$PullServerAddress)
     $NodeInfo.Add('PullServerPort',$PullServerPort)
     $NodeInfo.Add('uuid',[Guid]::NewGuid().Guid)
     Set-Content -Path $NodeInfoPath -Value $($NodeInfo | ConvertTo-Json -Depth 2) -Force
@@ -1000,4 +1008,8 @@ if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
     Write-Verbose "Removing the 'DSCBoot' task..."
     Unregister-ScheduledTask -TaskName DSCBoot -Confirm:$false
 }
+
 Stop-Transcript
+
+Write-Verbose "The bootstrap process has completed"
+Write-Verbose "Full bootstrap log file at: $LogPath"
