@@ -643,16 +643,14 @@ Configuration ClientBoot
                         $msg.Label = 'execute'
                         $msg.Body = $MessageBody
                         $queueName = "FormatName:DIRECT=HTTPS://$($using:PullServerName)/msmq/private$/rsdsc"
-                        $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)
-                        Write-Verbose "$($msg.Body)"
-                        
+                        $queue = New-Object System.Messaging.MessageQueue ($queueName, $False, $False)                        
                         Write-Verbose "Trying to register with pull server: $queueName"
                         $queue.Send($msg)
                         Write-Verbose "Waiting 60 seconds for pull server to generate mof file..."
                         Start-Sleep -Seconds 60
-                        Write-Verbose "Checking if client configuration has been generated..."
                         $Uri = "https://$($using:PullServerName):$($using:PullServerPort)/PSDSCPullServer.svc/Action(ConfigurationId=`'$($nodeinfo.uuid)`')/ConfigurationContent"
-                        Write-Verbose "$Uri"
+                        Write-Verbose "Checking if client configuration has been generated..."
+                        Write-Verbose "Using the following URI: $Uri"
                         $statusCode = (Invoke-WebRequest -Uri $Uri -ErrorAction SilentlyContinue -UseBasicParsing).statuscode
                     }
                     catch 
