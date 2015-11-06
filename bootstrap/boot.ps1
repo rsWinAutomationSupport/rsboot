@@ -876,10 +876,12 @@ if ($PullServerConfig)
     ##############################################################
     Write-Verbose "Initiating DSC Pull Server bootstrap..."
     ##############################################################
-    if(!($PullServerAddress))
+
+    if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
     {
         $PullServerAddress = $env:COMPUTERNAME
     }
+
     # Need $pullserver_config parameter/variable
     Write-Secrets -PullServerAddress $PullServerAddress `
                   -PullServer_config $PullServerConfig `
@@ -999,7 +1001,6 @@ else
     Write-Verbose "Applying final Client DSC Configuration from Pull server - $PullServerName"
     Update-DscConfiguration -Wait -Verbose
 }
-#endregion
 
 if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
 {
@@ -1010,4 +1011,4 @@ if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
 Stop-Transcript
 
 Write-Verbose "The bootstrap process has completed"
-Write-Verbose "Full bootstrap log file at: $LogPath"
+#endregion
