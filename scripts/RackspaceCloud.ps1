@@ -52,11 +52,11 @@ if ($RCv2)
     Write-Verbose "RackConnect status: $RCv2Status"
 }
 
-if (($automationComlete -eq $false) -and ($Timeout -lt 0))
+if (($automationComlete -eq $false) -or ($Timeout -lt 0))
 {
     Write-Verbose "Timed out while waiting for Rackspace Cloud Automation - some or all Rackspace cloud automation steps did not complete."
 }
 else
 {
-    Write-Verbose "Rackspace Service Automation wait has been completed"
+    Write-Verbose "Rackspace Service Automation has completed"
 }
