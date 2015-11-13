@@ -269,6 +269,10 @@ Configuration PullBoot
                                             -StoreName My `
                                             -Exportable `
                                             -KeyLength 2048
+                
+                # Export public key we just created
+                $PullCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}
+                Export-Certificate -Cert $PullCert -FilePath (Join-Path $using:PullConfigInstallPath -childpath "$PullServerAddress.cer") -Force
             }
             TestScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
@@ -896,11 +900,11 @@ if ($PullServerConfig)
              -PullConfigInstallPath $DefaultInstallPath `
              -OutputPath $DSCbootMofFolder
 
-    Start-DscConfiguration -Path $DSCbootMofFolder -Wait -Verbose -Force
-    
     Write-Verbose "Set Pull Server LCM"
     Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
 
+    Start-DscConfiguration -Path $DSCbootMofFolder -Wait -Verbose -Force
+    
     Write-Verbose "Running DSC config to install extra DSC modules as defined in rsPlatform configuration"
     Install-PlatformModules
 
