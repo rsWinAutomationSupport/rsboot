@@ -276,8 +276,9 @@ Configuration PullBoot
             }
             TestScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
-                if( Get-ChildItem -Path Cert:\LocalMachine\My\ | 
-                    Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"} ) 
+                $ExisitngPullCert = Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"} 
+                $ExisitngPullCertPubKey = Test-Path (Join-Path $using:PullConfigInstallPath -childpath "$PullServerAddress.cer")
+                if( $ExisitngPullCert -and $ExisitngPullCertPubKey) 
                 {
                     return $true
                 }
