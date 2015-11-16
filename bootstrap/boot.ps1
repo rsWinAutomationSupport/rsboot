@@ -17,31 +17,137 @@
 [CmdletBinding()]
 Param
 (
-    # defaultPath - Main installation directory (Default: <system_drive>:\Program Files\DSCAutomation)
-    #               Will also contain the configuration repository
-    [string] $DefaultInstallPath = (Join-Path $env:ProgramFiles -ChildPath DSCAutomation),
+    
+    [Parameter(ParameterSetName="PullServer", Mandatory=$true)]
+    [string]
+    $PullServerConfig,
 
-    # NodeInfoPath - The path to json file where node metadata will be recorded
-    [string] $NodeInfoPath = (Join-Path $DefaultInstallPath -ChildPath nodeinfo.json),
+    [Parameter(ParameterSetName="PullServer", Mandatory=$true)]
+    [string]
+    $GitOAuthToken,
 
-    # BootModuleZipURL - Link to the Zip file for the Bootstrap module
-    [string] $BootModuleZipURL = "https://github.com/rsWinAutomationSupport/rsboot/archive/ModulePOC.zip",
+    [Parameter(ParameterSetName="PullServer", Mandatory=$true)]
+    [string]
+    $GitOrgName,
 
-    # ModuleName - Name of the main bootstrap module
-    [string] $ModuleName = "rsBoot",
+    [Parameter(ParameterSetName="PullServer", Mandatory=$true)]
+    [string]
+    $GitRepoName,
 
-    # File name of DSC configuration file of pull server
-    [string] $PullServerConfig,
+    [Parameter(ParameterSetName="PullServer", Mandatory=$true)]
+    [string]
+    $GitRepoBranch,
 
-    [int] $PullServerPort = 8080,
+    [Parameter(ParameterSetName="PullServer", Mandatory=$false)]
+    [string]
+    $GitSourceUrl = "https://github.com/git-for-windows/git/releases/download/v2.6.2.windows.1/Git-2.6.2-64-bit.exe",
 
-    # BootParameters - Hashtable that contains bootstrap parameters
-    [hashtable] $BootParameters,
+    [Parameter(ParameterSetName="Pullserver", Mandatory=$false)]
+    [string]
+    $GitInstallDir  = "$env:ProgramFiles\Git\",
 
-    # Valid FQDN Hostname or IP Address of the pull server
-    [string] $PullServerAddress
+    [Parameter(ParameterSetName="PullServer", Mandatory=$false)]
+    [string]
+    $GitPackageName = "Git version 2.6.2",
+
+    [Parameter(ParameterSetName="PullServer", Mandatory=$false)]
+    [string]
+    $PackageManagerTag = "1.0.4",
+
+    [Parameter(Mandatory=$true)]
+    [string]
+    $SharedKey,
+
+    [Parameter(ParameterSetName="Client",Mandatory=$true)]
+    [string]
+    $ClientConfig,
+
+    # Client: Valid FQDN Hostname or IP Address of the pull server
+    # PullServer: Valid FQDN, not required if using IPs
+    [Parameter(ParameterSetName="PullServer", Mandatory=$false)]
+    [Parameter(ParameterSetName="Client", Mandatory=$true)]
+    [string]
+    $PullServerAddress,
+
+    [string]
+    $InstallPath = (Join-Path $env:ProgramFiles -ChildPath DSCAutomation),
+
+    [string]
+    $NodeInfoPath = (Join-Path $InstallPath -ChildPath nodeinfo.json),
+
+    # URL for the Zip file to download the Bootstrap module
+    [string]
+    $BootModuleZipURL = "https://github.com/rsWinAutomationSupport/rsboot/archive/ModulePOC.zip",
+
+    [string]
+    $BootModuleName = "rsBoot",
+
+    [string]
+    $DSCbootMofFolder = (Join-Path "$env:windir\Temp" -ChildPath DSCBootMof),
+
+    [int]
+    $PullServerPort = 8080,
+
+    [string]
+    $NetworkTestTarget = "github.com",
+
+    [string]
+    $PreBootScript
 )
 
+#########################################################################################################
+# Local environment configuration
+#region##################################################################################################
+
+# Bootstrap log configuration
+$TimeDate = (Get-Date -Format ddMMMyyyy_hh-mm-ss).ToString()
+$LogPath = (Join-Path $env:SystemRoot -ChildPath "Temp\DSCBootstrap_$TimeDate.log")
+
+Start-Transcript -Path $LogPath -Force
+
+Write-Verbose "Configuring local environment..."
+Write-Verbose "Setting LocalMachine execurtion policy to RemoteSigned"
+Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force
+
+Write-Verbose "Setting environment variables"
+[Environment]::SetEnvironmentVariable('defaultPath',$InstallPath,'Machine')
+[Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
+
+Write-Verbose " - Install path: $InstallPath"
+Write-Verbose " - NodeInfoPath location: $NodeInfoPath"
+
+if (-not(Test-Path $InstallPath))
+{
+    Write-Verbose "Creating configuration directory: $InstallPath"
+    New-Item -Path $InstallPath -ItemType Directory
+}
+else
+{
+    Write-Verbose "Configuration directory already exists"
+}
+
+Write-Verbose "Setting folder permissions for $InstallPath"
+Write-Verbose " - Disable persmission inheritance on $InstallPath"
+$objACL = Get-ACL -Path $InstallPath
+$objACL.SetAccessRuleProtection($True, $True)
+Set-ACL $InstallPath $objACL
+
+Write-Verbose " - Removing BUILTIN\Users access to $InstallPath"
+$colRights = [System.Security.AccessControl.FileSystemRights]"ReadAndExecute" 
+$InheritanceFlag = [System.Security.AccessControl.InheritanceFlags]::None 
+$PropagationFlag = [System.Security.AccessControl.PropagationFlags]::None 
+$objType =[System.Security.AccessControl.AccessControlType]::Allow 
+$objUser = New-Object System.Security.Principal.NTAccount("BUILTIN\Users") 
+$objACE = New-Object System.Security.AccessControl.FileSystemAccessRule `
+    ($objUser, $colRights, $InheritanceFlag, $PropagationFlag, $objType) 
+$objACL = Get-ACL -Path $InstallPath
+$objACL.RemoveAccessRuleAll($objACE) 
+Set-ACL $InstallPath $objACL
+
+#Write-Verbose "Saving provided parameters to $InstallPath\BootParameters.xml"
+#$PSBoundParameters | Export-Clixml -Path "$InstallPath\BootParameters.xml" -Force
+
+#endregion
 #########################################################################################################
 # Bootstrap DSC Configuration definitions for Pull Server (PullBoot) and Client (ClientBoot)
 #region##################################################################################################
@@ -51,17 +157,13 @@ Configuration PullBoot
 {  
     param 
     (
-        [hashtable] $BootParameters,
-        [string] $PullConfigInstallPath,
-        [string] $GitPackageName = "Git version 2.6.2",
-        [string] $GitInstallDir  = "C:\Program Files\Git\",
-        [string] $GitSourceUrl   = "https://github.com/git-for-windows/git/releases/download/v2.6.2.windows.1/Git-2.6.2-64-bit.exe"
+        [hashtable] $BootParameters
     )
     node $env:COMPUTERNAME 
     {
         File DevOpsDir
         {
-            DestinationPath = $PullConfigInstallPath
+            DestinationPath = $BootParameters.InstallPath
             Ensure = 'Present'
             Type = 'Directory'
         }
@@ -123,16 +225,16 @@ Configuration PullBoot
         }
         Package InstallGit 
         {
-            Name      = $GitPackageName
-            Path      = $GitSourceUrl
+            Name      = $BootParameters.GitPackageName
+            Path      = $BootParameters.GitSourceUrl
             ProductId = ""
-            Arguments = "/VERYSILENT /DIR $GitInstallDir"
+            Arguments = "/VERYSILENT /DIR $($BootParameters.GitInstallDir)"
             Ensure    = 'Present'
         }
         Script SetGitPath
         {
             SetScript = {
-                $GitBinPath = (Join-Path $using:GitInstallDir "bin")
+                $GitBinPath = (Join-Path $($using:BootParameters.GitInstallDir) "bin")
                 Write-Verbose "Setting Git executable path to $GitBinPath"
                 if (-not(Test-Path $GitBinPath))
                 {
@@ -199,10 +301,11 @@ Configuration PullBoot
                 $env:path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
                 # doing this only to help code readability
                 $BootParams = $using:BootParameters
-                $gitArguments = "clone --branch $($BootParams.branch_rsConfigs) https://$($BootParams.git_Oauthtoken)@github.com/$($BootParams.git_username)/$($BootParams.mR).git"
+                $ConfigRepoURL = "https://$($BootParams.GitOAuthToken)@github.com/$($BootParams.GitOrgName)/$($BootParams.GitRepoName).git"
+                $gitArguments = "clone --branch $($BootParams.GitRepoBranch) $ConfigRepoURL"
                 
-                Set-Location $using:PullConfigInstallPath -Verbose
-                $RepoPath = Join-Path -Path $using:PullConfigInstallPath -ChildPath $BootParams.mR
+                Set-Location $BootParams.InstallPath -Verbose
+                $RepoPath = Join-Path -Path $BootParams.InstallPath -ChildPath $BootParams.GitRepoName
                 if (Test-Path $RepoPath)
                 {
                     Write-Verbose "Existing config folder found - deleting..."
@@ -213,18 +316,18 @@ Configuration PullBoot
                 Start-Process -Wait 'git.exe' -ArgumentList $gitArguments
             }
             TestScript = {
-                # We will always return false to make sure that we run the Set script in all cases
+                # We will always return false to make sure that we run the Set script every time
                 return $false
             }
             GetScript = {
                 $BootParams = $using:BootParameters
-                return @{'Result' = (Test-Path -Path $(Join-Path $using:PullConfigInstallPath $BootParams.mR) -PathType Container)}
+                return @{'Result' = (Test-Path -Path $(Join-Path $BootParams.InstallPath $BootParams.GitRepoName) -PathType Container)}
             }
             DependsOn = '[Script]UpdateGitConfig'
         }
         File rsPlatformDir 
         {
-            SourcePath      = (Join-Path $PullConfigInstallPath "$($BootParameters.mR)\rsPlatform")
+            SourcePath      = (Join-Path $BootParameters.InstallPath "$($BootParameters.GitRepoName)\rsPlatform")
             DestinationPath = 'C:\Program Files\WindowsPowerShell\Modules\rsPlatform'
             Type            = 'Directory'
             Recurse         = $true
@@ -241,7 +344,7 @@ Configuration PullBoot
                 $BootParams = $using:BootParameters
                 Set-Location 'C:\Program Files\WindowsPowerShell\Modules\'
                 Write-Verbose "Cloning the rsPackageSourceManager module"
-                Start-Process -Wait 'git.exe' -ArgumentList "clone --branch $($BootParams.gitBr) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
+                Start-Process -Wait 'git.exe' -ArgumentList "clone --branch $($BootParams.PackageManagerTag) https://github.com/rsWinAutomationSupport/rsPackageSourceManager.git"
             }
             TestScript = {
                 return ([bool](Get-DscResource rsGit -ErrorAction SilentlyContinue))
@@ -256,6 +359,10 @@ Configuration PullBoot
         {
             SetScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
+                {
+                    $PullServerAddress = $env:COMPUTERNAME
+                }
                 Import-Module -Name rsBoot -Force
 
                 Get-ChildItem -Path Cert:\LocalMachine\My\ |
@@ -272,12 +379,16 @@ Configuration PullBoot
                 
                 # Export public key we just created
                 $PullCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}
-                Export-Certificate -Cert $PullCert -FilePath (Join-Path $using:PullConfigInstallPath -childpath "$PullServerAddress.cer") -Force
+                Export-Certificate -Cert $PullCert -FilePath (Join-Path $using:BootParameters.InstallPath -childpath "$PullServerAddress.cer") -Force
             }
             TestScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
+                {
+                    $PullServerAddress = $env:COMPUTERNAME
+                }
                 $ExisitngPullCert = Get-ChildItem -Path Cert:\LocalMachine\My\ | Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"} 
-                $ExisitngPullCertPubKey = Test-Path (Join-Path $using:PullConfigInstallPath -childpath "$PullServerAddress.cer")
+                $ExisitngPullCertPubKey = Test-Path (Join-Path $using:BootParameters.InstallPath -childpath "$PullServerAddress.cer")
                 if( $ExisitngPullCert -and $ExisitngPullCertPubKey) 
                 {
                     return $true
@@ -289,6 +400,10 @@ Configuration PullBoot
             }
             GetScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
+                {
+                    $PullServerAddress = $env:COMPUTERNAME
+                }
                 return @{
                     'Result' = (Get-ChildItem -Path Cert:\LocalMachine\My\ | 
                                 Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
@@ -311,6 +426,10 @@ Configuration PullBoot
         {
             SetScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
+                {
+                    $PullServerAddress = $env:COMPUTERNAME
+                }
                 
                 # Remove any existing certificates that may cause a conflict
                 Get-ChildItem -Path Cert:\LocalMachine\Root\ |
@@ -328,6 +447,10 @@ Configuration PullBoot
             }
             TestScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
+                {
+                    $PullServerAddress = $env:COMPUTERNAME
+                }
 
                 Write-Verbose "Comparing certificatates in System personal store and in 'Root'"
                 $SystemCert = (Get-ChildItem -Path Cert:\LocalMachine\My\ | 
@@ -347,6 +470,10 @@ Configuration PullBoot
             }
             GetScript = {
                 $PullServerAddress = $using:BootParameters.PullServerAddress
+                if( -not ($PullServerAddress) -or ($PullServerAddress -as [ipaddress]))
+                {
+                    $PullServerAddress = $env:COMPUTERNAME
+                }
                 return @{
                     'Result' = (Get-ChildItem -Path Cert:\LocalMachine\Root\ | 
                                 Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
@@ -698,7 +825,7 @@ Configuration ClientBoot
 function Install-PlatformModules 
 {
 # We cannot run this code directly until the rsPlatform module is installed, 
-# so we'll create it as string for now
+# so we'll create it as string and call it later
 @'
     Configuration InstallPlatformModules 
     {
@@ -719,82 +846,92 @@ function Install-PlatformModules
 #endregion
 
 #########################################################################################################
-# Local environment configuration
+# Helper functions
 #region##################################################################################################
-
-# Bootstrap log configuration
-$TimeDate = (Get-Date -Format ddMMMyyyy_hh-mm-ss).ToString()
-$LogPath = (Join-Path $env:SystemRoot -ChildPath "Temp\DSCBootstrap_$TimeDate.log")
-$WinTemp = "$env:windir\Temp"
-Start-Transcript -Path $LogPath -Force
-
-Write-Verbose "Configuring local environment..."
-Write-Verbose "Setting LocalMachine execurtion policy to RemoteSigned"
-Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force
-
-Write-Verbose "Setting environment variables"
-[Environment]::SetEnvironmentVariable('defaultPath',$DefaultInstallPath,'Machine')
-[Environment]::SetEnvironmentVariable('nodeInfoPath',$NodeInfoPath,'Machine')
-
-Write-Verbose " - Install path: $DefaultInstallPath"
-Write-Verbose " - NodeInfoPath location: $NodeInfoPath"
-
-if (-not(Test-Path $DefaultInstallPath))
+function Write-PullSettings 
 {
-    Write-Verbose "Creating configuration directory: $DefaultInstallPath"
-    New-Item -Path $DefaultInstallPath -ItemType Directory
-}
-else
-{
-    Write-Verbose "Configuration directory already exists"
-}
+    [CmdletBinding()]
+    param
+    (
+        # Destination path for Pull server secure settings file
+        [string]
+        $Path = (Join-Path $env:defaultPath "PullSettings.xml"),
 
-Write-Verbose "Setting folder permissions for $DefaultInstallPath"
-#Disable persmission inheritance on $DefaultInstallPath
-$objACL = Get-ACL -Path $DefaultInstallPath
-$objACL.SetAccessRuleProtection($True, $True)
-Set-ACL $DefaultInstallPath $objACL
+        # Certificate hash with which to ecrypt the settigns
+        [Parameter(Mandatory=$true)]
+        [string]
+        $CertThumbprint,
 
-# Remove BUILTIN\Users access to $DefaultInstallPath
-$colRights = [System.Security.AccessControl.FileSystemRights]"ReadAndExecute" 
-$InheritanceFlag = [System.Security.AccessControl.InheritanceFlags]::None 
-$PropagationFlag = [System.Security.AccessControl.PropagationFlags]::None 
-$objType =[System.Security.AccessControl.AccessControlType]::Allow 
-$objUser = New-Object System.Security.Principal.NTAccount("BUILTIN\Users") 
-$objACE = New-Object System.Security.AccessControl.FileSystemAccessRule `
-    ($objUser, $colRights, $InheritanceFlag, $PropagationFlag, $objType) 
-$objACL = Get-ACL -Path $DefaultInstallPath
-$objACL.RemoveAccessRuleAll($objACE) 
-Set-ACL $DefaultInstallPath $objACL
+        # Contents of the settings file
+        [hashtable]
+        $Settings
+    )
 
-if (($BootParameters -eq $null) -or ($BootParameters -eq ''))
-{
-    Write-Verbose "BootParameters were not provided, checking local secrets.."
-    if (Test-Path "$DefaultInstallPath\BootParameters.xml")
-    {
-        Write-Verbose "Reading contents of $DefaultInstallPath\BootParameters.xml"
-        $BootParameters = Import-Clixml "$DefaultInstallPath\BootParameters.xml"
+    $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
+
+    $PullSettings = @{}
+    $Settings.GetEnumerator() | Foreach {
+        $EncodedValue = [system.text.encoding]::UTF8.GetBytes($_.Value)
+        $EncryptedBytes = $CertObject.PublicKey.Key.Encrypt($EncodedValue, $true)
+        $EncryptedValue = [System.Convert]::ToBase64String($EncryptedBytes)
+        $PullSettings.Add($($_.Key),$EncryptedValue)
     }
-    else
+    $PullSettings.Add("CertThumbprint",$CertThumbprint)
+    
+    # Make a backup in case of there being an existing settings file
+    if (Test-Path $Path)
     {
-        Throw "BootParameters were not provided and BootParameters.xml not found!"
-        exit
+        Write-Verbose "Existing settings file found - making a backup..."
+        $TimeDate = (Get-Date -Format ddMMMyyyy_hhmmss).ToString()
+        Move-Item $Path -Destination ("$Path`-$TimeDate.bak") -Force
     }
-}
-else
-{
-    Write-Verbose "Saving boot parameters to $DefaultInstallPath\BootParameters.xml"
-    $BootParameters | Export-Clixml -Path "$DefaultInstallPath\BootParameters.xml" -Force
+    
+    $PullSettings | Export-Clixml -Path $Path -Force
+    
 }
 
+function Read-PullSettings 
+{
+    [CmdletBinding()]
+    param
+    (
+        # Destination path for Pull server secure settings file
+        [string]
+        $Path = (Join-Path $env:defaultPath "PullSettings.config"),
+
+        # Certificate hash with which to ecrypt the settigns
+        [string]
+        $CertThumbprint
+    )
+
+    Write-Verbose "Importing Encrypted path settings"
+    $EncrytedSettings = Import-Clixml -Path $Path
+
+    if (-not $CertThumbprint)
+    {
+        $CertThumbprint = $EncrytedSettings.CertThumbprint
+    }
+    $EncrytedSettings.Remove("CertThumbprint")
+
+    $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
+
+    $DecryptedSettings = @{}
+    $EncrytedSettings.GetEnumerator() | Foreach {
+        $EncryptedBytes = [System.Convert]::FromBase64String($_.Value)
+        $DecryptedBytes = $CertObject.PrivateKey.Decrypt($EncryptedBytes, $true)
+        $DecryptedValue = [system.text.encoding]::UTF8.GetString($DecryptedBytes)
+        $DecryptedSettings.Add($($_.Key),$DecryptedValue)
+    }
+    $DecryptedSettings
+}
 #endregion
 
 #########################################################################################################
 # Create a task to persist bootstrap accross reboots
 #region##################################################################################################
-Write-Verbose "Preparing to create a 'DSCBoot' task"
+Write-Verbose "Preparing to create 'DSCBoot' task"
 
-foreach( $key in ($PSBoundParameters.Keys -notmatch 'BootParameters') )
+foreach( $key in $PSBoundParameters.Keys)
 {
     $arguments += "-$key $($PSBoundParameters[$key]) "
 }
@@ -815,25 +952,25 @@ Register-ScheduledTask DSCBoot -InputObject $Task
 #########################################################################################################
 # Download & install rsBoot module
 #region##################################################################################################
-$Target = "github.com"
-Write-Verbose "Checking connectivity to '$Target'..."
-if (-not (Test-Connection $Target -Quiet))
+Write-Verbose "Checking connectivity to '$NetworkTestTarget'..."
+if (-not (Test-Connection $NetworkTestTarget -Quiet))
 {
     do
     {
-        Write-Host "Waiting for network connectivity to '$Target' to be established..."
+        Write-Host "Waiting for network connectivity to '$NetworkTestTarget' to be established..."
         Sleep -Seconds 20
     }
-    until (-not (Test-Connection $Target -Quiet))
+    until (-not (Test-Connection $NetworkTestTarget -Quiet))
 }
 
+$WinTemp = "$env:SystemRoot\Temp"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $ModuleFileName = $BootModuleZipURL.Split("/")[-1]
 $ZipPath = "$WinTemp\$ModuleFileName"
 
 $PSModuleLocation = "$Env:ProgramFiles\WindowsPowerShell\Modules\"
 
-Write-Verbose "Downloading the Bootstrap PS module"
+Write-Verbose "Downloading the Bootstrap PS module to $ZipPath"
 Invoke-WebRequest -Uri $BootModuleZipURL -OutFile $ZipPath
 Unblock-File -Path $ZipPath
 
@@ -846,18 +983,18 @@ if (Test-Path "$WinTemp\$ZipRootName")
 }
 [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $WinTemp)
 
-Rename-Item "$WinTemp\$ZipRootName" -NewName "$WinTemp\$ModuleName"
+Rename-Item "$WinTemp\$ZipRootName" -NewName "$WinTemp\$BootModuleName"
 
-$ModuleFolder = Join-Path $PSModuleLocation -Childpath $ModuleName
-if (Test-Path "$PSModuleLocation\$ModuleName")
+$ModuleFolder = Join-Path $PSModuleLocation -Childpath $BootModuleName
+if (Test-Path "$PSModuleLocation\$BootModuleName")
 {
     Write-Verbose "Found existing rsBoot module instance, removing it..."
-    Remove-Item -Path "$PSModuleLocation\$ModuleName" -Recurse -Force
+    Remove-Item -Path "$PSModuleLocation\$BootModuleName" -Recurse -Force
 }
 Write-Verbose "Installing rsBoot module"
-Move-Item -Path "$WinTemp\$ModuleName" -Destination $PSModuleLocation
+Move-Item -Path "$WinTemp\$BootModuleName" -Destination $PSModuleLocation
 Write-Verbose "Importing $ModuleName module"
-Import-Module -Name $ModuleName -Force -Verbose
+Import-Module -Name $BootModuleName -Force
 #endregion
 
 #########################################################################################################
@@ -875,6 +1012,18 @@ if ($BootParameters.PreBoot -ne $null)
 # Set folder for DSC boot mof files
 $DSCbootMofFolder = (Join-Path $WinTemp -ChildPath DSCBootMof)
 
+# Build the full bootstrap parameter set as a hashtable
+$BootParameters = @{}
+($MyInvocation.MyCommand.Parameters).Keys | 
+    Foreach {$value = (Get-Variable -Name $_ -EA SilentlyContinue).Value
+        if( $value.length -gt 0 ) 
+        {
+            $BootParameters.Add("$_","$value")
+        }
+    }
+
+#$BootParameters | Export-Clixml -Path "$InstallPath\settings.xml" -Force
+
 # Determine if we're building a Pull server or a client
 if ($PullServerConfig)
 {
@@ -887,31 +1036,64 @@ if ($PullServerConfig)
         $PullServerAddress = $env:COMPUTERNAME
     }
 
-    # Need $pullserver_config parameter/variable
+    <# Need $pullserver_config parameter/variable
     Write-Secrets -PullServerAddress $PullServerAddress `
                   -PullServer_config $PullServerConfig `
                   -BootParameters $BootParameters `
                   -Path $DefaultInstallPath
-    
-    Write-Verbose "Configuring WinRM"
+    #>
+
+    Write-Verbose "Configuring WinRM listener"
     Enable-WinRM
 
     Write-Verbose "Starting Pull Server Boot DSC configuration run"
-    PullBoot -BootParameters $BootParameters `
-             -PullConfigInstallPath $DefaultInstallPath `
-             -OutputPath $DSCbootMofFolder
+    PullBoot -BootParameters $BootParameters -OutputPath $DSCbootMofFolder
 
     Write-Verbose "Set Pull Server LCM"
-    Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
+
+    #Set-DscLocalConfigurationManager -Path $DSCbootMofFolder -Verbose
 
     Start-DscConfiguration -Path $DSCbootMofFolder -Wait -Verbose -Force
-    
     Write-Verbose "Running DSC config to install extra DSC modules as defined in rsPlatform configuration"
-    Install-PlatformModules
+    #Install-PlatformModules
 
-    $PullServerDSCConfigPath = "$DefaultInstallPath\$($BootParameters.mR)\$PullServerConfig"
+    # Create Pull server configuration file
+    $CertThumbprint = (Get-ChildItem Cert:\LocalMachine\My | 
+                        Where-Object -FilterScript {$_.Subject -eq "CN=$PullServerAddress"}).Thumbprint
+    
+    # Procecss bootstrap parameters and save only the ones we need to config file
+    $SettingKeyFilterSet = @("SharedKey",
+                             "InstallPath",
+                             "GitRepoName",
+                             "GitOrgName",
+                             "GitRepoBranch",
+                             "GitOAuthToken",
+                             "PullServerPort",
+                             "NodeInfoPath",
+                             "PullServerConfig",
+                             "PullServerAddress"
+                            )
+    
+    $Settings = @{}
+    $BootParameters.GetEnumerator() | foreach {  
+        if ($SettingKeyFilterSet -contains $($_.Name))
+        {
+            $Settings.Add($_.Name,$_.Value)
+        }
+    }
+    $PullSettings.Add("CertThumbprint",$CertThumbprint)
+
+    # Encrypt just the values of each setting using pull server's certificate and save to disk
+    Write-PullSettings -CertThumbprint $CertThumbprint -Settings $Settings -Path "$InstallPath\PullSettings.xml" -Verbose
+
+    $PullServerDSCConfigPath = "$InstallPath\$GitRepoName\$PullServerConfig"
+    if (-not (Test-Path $PullServerDSCConfigPath))
+    {
+        Throw "Pull Server configuration file not found!"
+    }
     Write-Verbose "Executing final Pull server DSC script from configuration repository"
     Write-Verbose "Configuration file: $PullServerDSCConfigPath"
+    <#
     try
     {
         & "$PullServerDSCConfigPath" -Verbose
@@ -920,13 +1102,14 @@ if ($PullServerConfig)
     {
         Write-Verbose "Error in Pull Server DSC configuration: $($_.Exception)"
     }
+    #>
 }
 else
 {
     ##############################################################
     Write-Verbose "Initiating DSC Client bootstrap..."
     ##############################################################
-
+    <#
     # Will hold Client configuration values to store in $NodeInfoPath
     $NodeInfo = @{}
 
@@ -1005,6 +1188,7 @@ else
 
     Write-Verbose "Applying final Client DSC Configuration from Pull server - $PullServerName"
     Update-DscConfiguration -Wait -Verbose
+    #>
 }
 
 if (Get-ScheduledTask -TaskName 'DSCBoot' -ErrorAction SilentlyContinue)
