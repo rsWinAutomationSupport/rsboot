@@ -87,55 +87,88 @@ function Enable-WinRM
     }
 }
 
-#Creates secrets.json on a pullserver
-function Write-Secrets 
+function Write-DSCAutomationSettings 
 {
+    [CmdletBinding()]
     param
     (
-        # Pull server address
-        [string] $PullServerAddress,
+        # Destination path for DSC Automation secure settings file
+        [string]
+        $Path = (Join-Path $env:defaultPath "DSCAutomationSettings.xml"),
 
-        # Name of the DSC script file that contains main Pull server config
-        [string] $pullserver_config,
+        # Certificate hash with which to ecrypt the settigns
+        [Parameter(Mandatory=$true)]
+        [string]
+        $CertThumbprint,
 
-        # Contents of the secrets file
-        [hashtable] $BootParameters,
-        
-        # Path where to store the secrets
-        [string] $Path
+        # Contents of the settings file
+        [Parameter(Mandatory=$true)]
+        [hashtable]
+        $Settings
     )
 
-    Write-Verbose "Checking that  all compulsory secrets keys are present..."
-    $keys = @('branch_rsConfigs', 'mR', 'git_username', 'gitBr', 'git_oAuthtoken','shared_key')
-    ForEach($key in $keys)
-    {
-        if($BootParameters.keys -notcontains $key)
-        { 
-            Write-Verbose "$key key is missing from BootParameters"
-            exit
-        }
+    # Create the certificate object whith which to secure the data
+    $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
+
+    # Process the provided hashtable and encrypt just the value string for each KV pair
+    $DSCAutomationSettings = @{}
+    $Settings.GetEnumerator() | Foreach {
+        $EncodedValue = [system.text.encoding]::UTF8.GetBytes($_.Value)
+        $EncryptedBytes = $CertObject.PublicKey.Key.Encrypt($EncodedValue, $true)
+        $EncryptedValue = [System.Convert]::ToBase64String($EncryptedBytes)
+        $DSCAutomationSettings.Add($($_.Key),$EncryptedValue)
     }
 
-    Write-Verbose "Preparing secrets and exporting as json file"
-    # First remove any existing conflicting entries in case re-running bootstrap
-    $BootParameters.Remove("PullServerAddress")
-    $BootParameters.Remove("pullserver_config")
-
-    # Add additional keys to the boot parameters, which were passed directly to the boot.ps1 script
-    $BootParameters.Add("PullServerAddress","$PullServerAddress")
-    $BootParameters.Add("pullserver_config","$pullserver_config")
+    # Adding cert hash value to databag to make it easier to decrypt the data later
+    $DSCAutomationSettings.Add("CertThumbprint",$CertThumbprint)
     
-    # Remove redundant keys
-    $BootParameters.Remove("PreBoot")
-    
-    $SecretsPath = (Join-Path $Path 'secrets.json')
-    # Make a backup in case of there being an existing secrets file
-    if (Test-Path $SecretsPath)
+    # Make a backup in case of there being an existing settings file
+    if (Test-Path $Path)
     {
-        Write-Verbose "Existing secrets.json found - making a backup..."
+        Write-Verbose "Existing settings file found - making a backup..."
         $TimeDate = (Get-Date -Format ddMMMyyyy_hhmmss).ToString()
-        Move-Item $SecretsPath -Destination (Join-Path $Path "secrets.json.$TimeDate.bak") -Force
+        Move-Item $Path -Destination ("$Path`-$TimeDate.bak") -Force
     }
-    Write-Verbose "Writing secrets.json"
-    Set-Content -Path $SecretsPath -Value $($BootParameters | ConvertTo-Json -Depth 4)
+    
+    # Save the encrypted databag as a native PS hashtable object
+    $DSCAutomationSettings | Export-Clixml -Path $Path -Force
+}
+
+function Read-DSCAutomationSettings 
+{
+    [CmdletBinding()]
+    param
+    (
+        # Source path for the secure settings file
+        [string]
+        $Path = (Join-Path $env:defaultPath "DSCAutomationSettings.xml"),
+
+        # Certificate hash with which to decrypt the settigns
+        [string]
+        $CertThumbprint
+    )
+
+    Write-Verbose "Importing the settings databag"
+    $EncrytedSettings = Import-Clixml -Path $Path
+
+    # Try to locate the the original cert using the hash in databag if one is not provided
+    if (-not $CertThumbprint)
+    {
+        $CertThumbprint = $EncrytedSettings.CertThumbprint
+    }
+    # We will not need the thumbprint as part the returned settings
+    $EncrytedSettings.Remove("CertThumbprint")
+
+    # Create the certificate object whith which to decrypt the data
+    $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
+
+    # Process the provided hashtable and decrypt just the value string for each KV pair
+    $DecryptedSettings = @{}
+    $EncrytedSettings.GetEnumerator() | Foreach {
+        $EncryptedBytes = [System.Convert]::FromBase64String($_.Value)
+        $DecryptedBytes = $CertObject.PrivateKey.Decrypt($EncryptedBytes, $true)
+        $DecryptedValue = [system.text.encoding]::UTF8.GetString($DecryptedBytes)
+        $DecryptedSettings.Add($($_.Key),$DecryptedValue)
+    }
+    $DecryptedSettings
 }
