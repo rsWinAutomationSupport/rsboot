@@ -848,14 +848,14 @@ function Install-PlatformModules
 #########################################################################################################
 # Helper functions
 #region##################################################################################################
-function Write-PullSettings 
+function Write-DSCAutomationSettings 
 {
     [CmdletBinding()]
     param
     (
-        # Destination path for Pull server secure settings file
+        # Destination path for DSC Automation secure settings file
         [string]
-        $Path = (Join-Path $env:defaultPath "PullSettings.xml"),
+        $Path = (Join-Path $env:defaultPath "DSCAutomationSettings.xml"),
 
         # Certificate hash with which to ecrypt the settigns
         [Parameter(Mandatory=$true)]
@@ -863,20 +863,25 @@ function Write-PullSettings
         $CertThumbprint,
 
         # Contents of the settings file
+        [Parameter(Mandatory=$true)]
         [hashtable]
         $Settings
     )
 
+    # Create the certificate object whith which to secure the data
     $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
 
-    $PullSettings = @{}
+    # Process the provided hashtable and encrypt just the value string for each KV pair
+    $DSCAutomationSettings = @{}
     $Settings.GetEnumerator() | Foreach {
         $EncodedValue = [system.text.encoding]::UTF8.GetBytes($_.Value)
         $EncryptedBytes = $CertObject.PublicKey.Key.Encrypt($EncodedValue, $true)
         $EncryptedValue = [System.Convert]::ToBase64String($EncryptedBytes)
-        $PullSettings.Add($($_.Key),$EncryptedValue)
+        $DSCAutomationSettings.Add($($_.Key),$EncryptedValue)
     }
-    $PullSettings.Add("CertThumbprint",$CertThumbprint)
+
+    # Adding cert hash value to databag to make it easier to decrypt the data later
+    $DSCAutomationSettings.Add("CertThumbprint",$CertThumbprint)
     
     # Make a backup in case of there being an existing settings file
     if (Test-Path $Path)
@@ -886,35 +891,39 @@ function Write-PullSettings
         Move-Item $Path -Destination ("$Path`-$TimeDate.bak") -Force
     }
     
-    $PullSettings | Export-Clixml -Path $Path -Force
-    
+    # Save the encrypted databag as a native PS hashtable object
+    $DSCAutomationSettings | Export-Clixml -Path $Path -Force
 }
 
-function Read-PullSettings 
+function Read-DSCAutomationSettings 
 {
     [CmdletBinding()]
     param
     (
-        # Destination path for Pull server secure settings file
+        # Source path for the secure settings file
         [string]
-        $Path = (Join-Path $env:defaultPath "PullSettings.config"),
+        $Path = (Join-Path $env:defaultPath "DSCAutomationSettings.xml"),
 
-        # Certificate hash with which to ecrypt the settigns
+        # Certificate hash with which to decrypt the settigns
         [string]
         $CertThumbprint
     )
 
-    Write-Verbose "Importing Encrypted path settings"
+    Write-Verbose "Importing the settings databag"
     $EncrytedSettings = Import-Clixml -Path $Path
 
+    # Try to locate the the original cert using the hash in databag if one is not provided
     if (-not $CertThumbprint)
     {
         $CertThumbprint = $EncrytedSettings.CertThumbprint
     }
+    # We will not need the thumbprint as part the returned settings
     $EncrytedSettings.Remove("CertThumbprint")
 
+    # Create the certificate object whith which to decrypt the data
     $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
 
+    # Process the provided hashtable and decrypt just the value string for each KV pair
     $DecryptedSettings = @{}
     $EncrytedSettings.GetEnumerator() | Foreach {
         $EncryptedBytes = [System.Convert]::FromBase64String($_.Value)
@@ -931,6 +940,7 @@ function Read-PullSettings
 #region##################################################################################################
 Write-Verbose "Preparing to create 'DSCBoot' task"
 
+# Setup a variable to hold parameters with which bootstrap was invoked for use as part of task action
 foreach( $key in $PSBoundParameters.Keys)
 {
     $arguments += "-$key $($PSBoundParameters[$key]) "
@@ -1074,17 +1084,16 @@ if ($PullServerConfig)
                              "PullServerAddress"
                             )
     
-    $Settings = @{}
+    $DSCSettings = @{}
     $BootParameters.GetEnumerator() | foreach {  
         if ($SettingKeyFilterSet -contains $($_.Name))
         {
-            $Settings.Add($_.Name,$_.Value)
+            $DSCSettings.Add($_.Name,$_.Value)
         }
     }
-    $PullSettings.Add("CertThumbprint",$CertThumbprint)
 
     # Encrypt just the values of each setting using pull server's certificate and save to disk
-    Write-PullSettings -CertThumbprint $CertThumbprint -Settings $Settings -Path "$InstallPath\PullSettings.xml" -Verbose
+    Write-DSCAutomationSettings -CertThumbprint $CertThumbprint -Settings $DSCSettings -Path "$InstallPath\DSCAutomationSettings.xml" -Verbose
 
     $PullServerDSCConfigPath = "$InstallPath\$GitRepoName\$PullServerConfig"
     if (-not (Test-Path $PullServerDSCConfigPath))
