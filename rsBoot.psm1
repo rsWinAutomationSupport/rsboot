@@ -87,7 +87,7 @@ function Enable-WinRM
     }
 }
 
-function Write-DSCAutomationSettings 
+function Protect-DSCAutomationSettings 
 {
     [CmdletBinding()]
     param
@@ -154,41 +154,60 @@ function Write-DSCAutomationSettings
     Export-Clixml -InputObject $DSCAutomationSettings -Path $Path -Force
 }
 
-function Read-DSCAutomationSettings 
+function Unprotect-DSCAutomationSettings
 {
     [CmdletBinding()]
     param
     (
         # Source path for the secure settings file
         [string]
-        $Path = (Join-Path $env:defaultPath "DSCAutomationSettings.xml"),
-
-        # Certificate hash with which to decrypt the settigns
-        [string]
-        $CertThumbprint
+        $Path = (Join-Path $env:defaultPath "DSCAutomationSettings.xml")
     )
 
-    Write-Verbose "Importing the settings databag"
-    $EncrytedSettings = Import-Clixml -Path $Path
-
-    # Try to locate the the original cert using the hash in databag if one is not provided
-    if (-not $CertThumbprint)
+    Write-Verbose "Importing the settings databag from $Path"
+    If ( -not (Test-Path -Path $Path))
     {
-        $CertThumbprint = $EncrytedSettings.CertThumbprint
+        return $null
     }
-    # We will not need the thumbprint as part the returned settings
-    $EncrytedSettings.Remove("CertThumbprint")
-
-    # Create the certificate object whith which to decrypt the data
-    $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
-
-    # Process the provided hashtable and decrypt just the value string for each KV pair
-    $DecryptedSettings = @{}
-    $EncrytedSettings.GetEnumerator() | Foreach {
-        $EncryptedBytes = [System.Convert]::FromBase64String($_.Value)
-        $DecryptedBytes = $CertObject.PrivateKey.Decrypt($EncryptedBytes, $true)
-        $DecryptedValue = [system.text.encoding]::UTF8.GetString($DecryptedBytes)
-        $DecryptedSettings.Add($($_.Key),$DecryptedValue)
+    # Import the encrypted data file
+    $EncrytedSettings = Import-Clixml -Path $Path
+    # Create a hashtable object to hold the decrypted credentials
+    $DecryptedSettings = New-Object 'System.Collections.Generic.Dictionary[string,pscredential]'
+    if($EncrytedSettings -ne $null) 
+    {
+        # Process each set of values for each Key in the hashtable
+        foreach ( $Name in $EncrytedSettings.GetEnumerator() )
+        {
+            $Item = $Name.Value
+            # Convert Thumbprint value from Base64 to string
+            $CertThumbprint = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($Item.thumbprint))
+            # Retrieve the certificate used to encrypt the AES key used to encrypt the data
+            $decryptCert = Get-ChildItem Cert:\LocalMachine\My\ | Where-Object { $_.Thumbprint -eq $CertThumbprint }
+            If ( -not $decryptCert ) 
+            {
+                $Param = $Name.Name
+                Write-Verbose "Certificate with Thumbprint $Thumbprint for $Param data could not be found. Skipping..."
+                Continue
+            }
+            try
+            {
+                # Use the private key of certificate to decrypt the encryption key
+                $key = $decryptCert.PrivateKey.Decrypt([System.Convert]::FromBase64String($item.encrypted_key), $true)
+                # Use the key we just decrypted to convert the data to a secure string object
+                $secString = ConvertTo-SecureString -String $item.encrypted_data -Key $key
+            }
+            finally
+            {
+                if ($key)
+                {
+                    # Reset the $key variable in preparation for next iteration
+                    [array]::Clear($key, 0, $key.Length)
+                }
+            }
+            # Add the newly decrypted PSCredential object to the collection
+            $DecryptedSettings[$Name.Name] = New-Object pscredential($Name.Name, $secString)
+        }
     }
-    $DecryptedSettings
+    return $DecryptedSettings
 }
+
