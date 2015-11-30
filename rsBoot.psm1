@@ -107,20 +107,38 @@ function Write-DSCAutomationSettings
         $Settings
     )
 
-    # Create the certificate object whith which to secure the data
-    $CertObject = Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -like $CertThumbprint}
+    # Create the certificate object whith which to secure the AES key
+    $CertObject = Get-ChildItem Cert:\LocalMachine\My\$CertThumbprint
 
-    # Process the provided hashtable and encrypt just the value string for each KV pair
+    # Create RNG Provider Object to help with AES key generation
+    $rngProviderObject = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
+    
+    # Generates a random AES encryption $key that is sized correctly
+    $key = New-Object byte[](32)
+    $rngProviderObject.GetBytes($key)
+    
+    # Process all Key/Value pairs in the supplied $settings hashtable and encrypt the value
     $DSCAutomationSettings = @{}
     $Settings.GetEnumerator() | Foreach {
-        $EncodedValue = [system.text.encoding]::UTF8.GetBytes($_.Value)
-        $EncryptedBytes = $CertObject.PublicKey.Key.Encrypt($EncodedValue, $true)
-        $EncryptedValue = [System.Convert]::ToBase64String($EncryptedBytes)
-        $DSCAutomationSettings.Add($($_.Key),$EncryptedValue)
-    }
+        # Convert the current value ot secure string
+        $SecureString = ConvertTo-SecureString -String $_.Value -AsPlainText -Force
+    
+        # Convert the secure string to an encrypted string, so we can save it to a file
+        $encryptedSecureString = ConvertFrom-SecureString -SecureString $SecureString -Key $key
 
-    # Adding cert hash value to databag to make it easier to decrypt the data later
-    $DSCAutomationSettings.Add("CertThumbprint",$CertThumbprint)
+        # Encrypt the AES key we used earlier with the specified certificate
+        $encryptedKey = $CertObject.PublicKey.Key.Encrypt($key,$true)
+    
+        # Populate the secure data object and add it to $Settings
+        $result = @{
+            $_.Name = @{
+                "encrypted_data" = $encryptedSecureString;
+                "encrypted_key"  = [System.Convert]::ToBase64String($encryptedKey);
+                "thumbprint"     = [System.Convert]::ToBase64String([char[]]$CertThumbprint)
+            }
+        }
+        $DSCAutomationSettings += $result
+    }
     
     # Make a backup in case of there being an existing settings file
     if (Test-Path $Path)
@@ -131,7 +149,9 @@ function Write-DSCAutomationSettings
     }
     
     # Save the encrypted databag as a native PS hashtable object
-    $DSCAutomationSettings | Export-Clixml -Path $Path -Force
+    Write-Verbose "Saving encrypted settings file to $Path"
+    #$DSCAutomationSettings | Export-Clixml -Path $Path -Force
+    Export-Clixml -InputObject $DSCAutomationSettings -Path $Path -Force
 }
 
 function Read-DSCAutomationSettings 
