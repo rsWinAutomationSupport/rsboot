@@ -1005,7 +1005,7 @@ if ($PullServerConfig)
     }
 
     # Encrypt just the values of each setting using pull server's certificate and save to disk
-    Write-DSCAutomationSettings -CertThumbprint $CertThumbprint -Settings $DSCSettings -Path "$InstallPath\DSCAutomationSettings.xml" -Verbose
+    Protect-DSCAutomationSettings -CertThumbprint $CertThumbprint -Settings $DSCSettings -Path "$InstallPath\DSCAutomationSettings.xml" -Verbose
 
     $PullServerDSCConfigPath = "$InstallPath\$GitRepoName\$PullServerConfig"
     if (-not (Test-Path $PullServerDSCConfigPath))
