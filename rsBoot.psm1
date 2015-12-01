@@ -200,7 +200,7 @@ function Unprotect-DSCAutomationSettings
             {
                 if ($key)
                 {
-                    # Reset the $key variable in preparation for next iteration
+                    # Overwrite $key variable with zeros to remove it fully from memory
                     [array]::Clear($key, 0, $key.Length)
                 }
             }
